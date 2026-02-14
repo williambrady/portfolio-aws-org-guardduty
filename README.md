@@ -1,132 +1,181 @@
-# Project Name
+# portfolio-aws-org-guardduty
 
-Brief description of your project.
+Deploy GuardDuty organization-wide across all AWS regions with discovery-driven Terraform deployment.
+
+## Overview
+
+portfolio-aws-org-guardduty configures AWS GuardDuty across all 17 AWS regions in an AWS Organization. It designates a delegated administrator (audit account), enables detectors, and configures organization-wide auto-enable with all protection plans.
+
+This project was extracted from [portfolio-aws-org-baseline](../portfolio-aws-org-baseline) for independent deployment and iteration.
+
+## Features
+
+- **Delegated Admin** - Configures audit account as GuardDuty delegated administrator in all regions
+- **Detector Enablement** - Enables GuardDuty detector in the audit account across all regions
+- **Organization Auto-Enable** - Configures `auto_enable_organization_members = ALL` for all regions
+- **Protection Plans** (auto-enabled for all member accounts):
+  - S3 Data Events protection
+  - Kubernetes Audit Logs
+  - Malware Protection (EBS scanning)
+  - Lambda Network Logs (GuardDuty.6)
+  - RDS Login Events (GuardDuty.9)
+  - Runtime Monitoring with EKS, ECS Fargate, EC2 agent management
 
 ## Prerequisites
 
-- [Terraform](https://www.terraform.io/downloads) >= 1.0
-- [AWS CLI](https://aws.amazon.com/cli/) configured with appropriate credentials
-- [pre-commit](https://pre-commit.com/) (optional, for development)
-- [tflint](https://github.com/terraform-linters/tflint) (optional, for linting)
+- **Docker** - Required for running the deployment
+- **AWS CLI** - Configured with a profile for the management account
+- **AWS Organization** - Must already exist (managed by `portfolio-aws-org-baseline`)
+- **GuardDuty Service Access** - Must be enabled in Organizations (managed by `portfolio-aws-org-baseline`)
+- **Audit Account** - Must already exist in the organization
 
 ## Quick Start
 
+### 1. Configure
+
+Edit `config.yaml`:
+
+```yaml
+resource_prefix: "myorg"
+primary_region: "us-east-1"
+audit_account_id: "123456789012"  # Your audit account ID
+```
+
+### 2. Plan
+
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/your-repo.git
-cd your-repo
+AWS_PROFILE=management-account make plan
+```
 
-# Initialize Terraform
-cd terraform
-terraform init
+### 3. Apply
 
+```bash
+AWS_PROFILE=management-account make apply
+```
+
+## Usage
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `make discover` | Discover current AWS state without changes |
+| `make plan` | Discovery + Terraform plan (preview changes) |
+| `make apply` | Discovery + Terraform apply + post-deployment verification |
+| `make destroy` | Destroy all managed resources (use with caution) |
+| `make shell` | Open interactive shell in container for debugging |
+
+### Examples
+
+```bash
 # Preview changes
-terraform plan
+AWS_PROFILE=mgmt make plan
 
-# Apply changes
-terraform apply
+# Apply GuardDuty configuration
+AWS_PROFILE=mgmt make apply
+
+# Debug: open shell in container
+AWS_PROFILE=mgmt make shell
+```
+
+## Configuration Reference
+
+```yaml
+# REQUIRED: Prefix for all AWS resource names
+resource_prefix: "myorg"
+
+# REQUIRED: Primary AWS region
+primary_region: "us-east-1"
+
+# REQUIRED: Audit account ID (delegated admin for GuardDuty)
+audit_account_id: "123456789012"
+
+# Cross-account role name (default: OrganizationAccountAccessRole)
+audit_account_role: "OrganizationAccountAccessRole"
+
+# Custom tags
+tags:
+  owner: "platform-team"
+  contact: "platform@example.com"
 ```
 
 ## Project Structure
 
 ```
-.
-├── .github/
-│   ├── workflows/
-│   │   ├── lint.yml          # Pre-commit linting pipeline
-│   │   └── sast.yml          # Security scanning pipeline
-│   └── CODEOWNERS            # Code ownership definitions
-├── cloudformation/           # CloudFormation templates
-├── scripts/                  # Utility scripts
+portfolio-aws-org-guardduty/
+├── entrypoint.sh           # Main orchestration script
+├── config.yaml             # Configuration file
+├── requirements.txt        # Python dependencies
+├── discovery/
+│   ├── discover.py         # AWS discovery script
+│   └── state_sync.py       # Terraform state synchronization
+├── post-deployment/
+│   └── verify-guardduty.py # Deployment verification
 ├── terraform/
-│   ├── main.tf               # Main Terraform configuration
-│   ├── variables.tf          # Input variables
-│   ├── outputs.tf            # Output definitions
-│   ├── providers.tf          # Provider configuration
-│   └── versions.tf           # Version constraints
-├── .gitignore
-├── .pre-commit-config.yaml   # Pre-commit hooks configuration
-├── .tflint.hcl               # TFLint configuration
-├── .terraform-docs.yml       # Terraform docs configuration
-├── CLAUDE.md                 # AI assistant guidance
-├── LICENSE
-├── Makefile
-└── README.md
+│   ├── main.tf             # Root module
+│   ├── variables.tf        # Variable definitions
+│   ├── outputs.tf          # Output definitions
+│   ├── providers.tf        # Provider configurations (34 providers)
+│   ├── versions.tf         # Version constraints
+│   ├── guardduty-regional.tf  # Multi-region deployment
+│   └── modules/
+│       ├── guardduty-org/        # Delegated admin registration
+│       ├── guardduty-enabler/    # Detector enablement
+│       └── guardduty-org-config/ # Organization configuration
+├── Dockerfile
+└── Makefile
 ```
 
-## Branching Strategy
+## Architecture
+
+### Module Structure
+
+| Module | Account | Purpose |
+|--------|---------|---------|
+| `guardduty-org` | Management | Designate delegated admin (per-region) |
+| `guardduty-enabler` | Delegated Admin | Enable GuardDuty detector |
+| `guardduty-org-config` | Delegated Admin | Configure auto-enable and protection plans |
+
+### Deployment Phases
+
+1. **Discovery** - Inspect existing GuardDuty state
+2. **Terraform Init** - Initialize with S3 backend, sync existing resources
+3. **Terraform Plan/Apply** - Deploy GuardDuty configuration
+4. **Verification** - Validate configuration across all regions
+
+### Multi-Account Architecture
 
 ```
-main (production)
- └── develop (integration)
-      └── feature/* (new features)
+Management Account
+├── Registers delegated admin (17 regions)
+└── Runs Terraform
+
+Audit Account (Delegated Admin)
+├── GuardDuty detectors (17 regions)
+├── Organization auto-enable configuration
+└── All protection plans enabled
+
+Member Accounts
+└── Auto-enrolled by organization configuration
 ```
 
-| Branch | Purpose | Merges To |
-|--------|---------|-----------|
-| `main` | Production-ready code. Protected branch. | - |
-| `develop` | Integration branch for features. | `main` (via PR) |
-| `feature/*` | New features and changes. | `develop` (via PR) |
+## State Management
 
-### Workflow
+- Terraform state stored in S3: `{resource_prefix}-guardduty-tfstate-{account_id}/guardduty/terraform.tfstate`
+- State bucket created automatically on first run with KMS encryption, versioning, and public access blocked
 
-1. Create a feature branch from `develop`:
-   ```bash
-   git checkout develop
-   git pull
-   git checkout -b feature/my-feature
-   ```
+## Relationship to org-baseline
 
-2. Make changes and commit:
-   ```bash
-   git add .
-   git commit -m "feat: add my feature"
-   ```
+This project depends on `portfolio-aws-org-baseline` for:
+- AWS Organization creation
+- GuardDuty service access principal (`guardduty.amazonaws.com`) in the organization
+- Shared accounts (audit account) creation
 
-3. Push and create PR to `develop`:
-   ```bash
-   git push -u origin feature/my-feature
-   ```
-
-4. After review and merge to `develop`, create PR from `develop` to `main` for release.
-
-## Development
-
-### Setup Pre-commit Hooks
-
-```bash
-pip install pre-commit
-pre-commit install
-```
-
-### Available Make Targets
-
-```bash
-make help       # Show available targets
-make init       # Initialize Terraform
-make plan       # Run Terraform plan
-make apply      # Apply changes
-make fmt        # Format code
-make lint       # Run linters
-make test       # Run tests
-```
-
-## Configuration
-
-### Variables
-
-| Name | Description | Default |
-|------|-------------|---------|
-| `aws_region` | AWS region for resources | `us-east-1` |
-| `project_name` | Name of the project | `my-project` |
-| `environment` | Environment name | `dev` |
+GuardDuty-specific resources (delegated admin, detectors, org config) are fully managed by this project.
 
 ## Security
 
-This project includes automated security scanning via [portfolio-code-scanner](https://github.com/williambrady/portfolio-code-scanner). Security scans run on:
-- Push to `main` or `develop` branches
-- Pull requests
-- Daily scheduled runs
+This project includes automated security scanning via [portfolio-code-scanner](https://github.com/williambrady/portfolio-code-scanner).
 
 ## License
 

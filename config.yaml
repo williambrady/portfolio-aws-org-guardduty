@@ -1,0 +1,22 @@
+# GuardDuty Organization Configuration
+# This project deploys GuardDuty across all regions in an AWS Organization.
+# It assumes the AWS Organization and delegated admin service principals
+# are already configured by portfolio-aws-org-baseline.
+
+# REQUIRED: Primary AWS region for state and finding aggregation
+primary_region: "us-east-1"
+
+# REQUIRED: Prefix for all AWS resource names (S3 state bucket, etc.)
+resource_prefix: "ccoe"
+
+# REQUIRED: Audit account ID (delegated admin for GuardDuty)
+# This account must already exist in the organization
+audit_account_id: ""
+
+# Cross-account role name (default: OrganizationAccountAccessRole)
+audit_account_role: "OrganizationAccountAccessRole"
+
+# Custom tags applied to all resources
+tags:
+  owner: "william.brady"
+  contact: "will@crofton.cloud"

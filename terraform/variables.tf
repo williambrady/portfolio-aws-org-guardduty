@@ -1,17 +1,35 @@
-variable "aws_region" {
-  description = "AWS region for resources"
+# Variables for GuardDuty Organization Deployment
+
+variable "primary_region" {
+  description = "Primary AWS region for state and finding aggregation"
   type        = string
-  default     = "us-east-1"
 }
 
-variable "project_name" {
-  description = "Name of the project (used for tagging)"
+variable "resource_prefix" {
+  description = "Prefix for all AWS resource names"
   type        = string
-  default     = "my-project"
 }
 
-variable "environment" {
-  description = "Environment name (e.g., dev, staging, prod)"
+variable "audit_account_id" {
+  description = "AWS account ID of the audit account (delegated administrator for GuardDuty)"
   type        = string
-  default     = "dev"
+  default     = ""
+}
+
+variable "management_account_id" {
+  description = "AWS account ID of the management account (auto-detected if empty)"
+  type        = string
+  default     = ""
+}
+
+variable "guardduty_org_exists" {
+  description = "Whether GuardDuty organization configuration already exists"
+  type        = bool
+  default     = false
+}
+
+variable "guardduty_delegated_admin" {
+  description = "Existing GuardDuty delegated admin account ID (empty if none)"
+  type        = string
+  default     = ""
 }

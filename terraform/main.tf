@@ -1,7 +1,8 @@
-# Main Terraform configuration
-# Add your resources here
+# GuardDuty Organization Deployment
+# Manages GuardDuty across all regions in an AWS Organization
 
-# Example:
-# resource "aws_s3_bucket" "example" {
-#   bucket = "${var.project_name}-${var.environment}-bucket"
-# }
+data "aws_caller_identity" "current" {}
+
+locals {
+  accounts_exist = var.audit_account_id != ""
+}
