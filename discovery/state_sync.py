@@ -9,6 +9,7 @@ before plan/apply runs.
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import boto3
@@ -34,8 +35,12 @@ ALL_REGIONS = [
     "sa-east-1",
 ]
 
+# Number of retries for terraform import commands
+IMPORT_RETRIES = 2
+IMPORT_RETRY_DELAY = 5
 
-def run_terraform_cmd(args: list) -> tuple:
+
+def run_terraform_cmd(args: list, timeout: int = 120) -> tuple:
     """Run a terraform command and return (success, output)."""
     cmd = ["terraform"] + args
     try:
@@ -44,9 +49,12 @@ def run_terraform_cmd(args: list) -> tuple:
             capture_output=True,
             text=True,
             cwd="/work/terraform",
+            timeout=timeout,
         )
         output = result.stdout + result.stderr
         return result.returncode == 0, output
+    except subprocess.TimeoutExpired:
+        return False, f"Command timed out after {timeout}s: {' '.join(cmd)}"
     except Exception as e:
         return False, str(e)
 
@@ -65,11 +73,20 @@ def resource_exists_in_state(address: str, state_resources: set) -> bool:
 
 
 def import_resource(address: str, resource_id: str) -> bool:
-    """Import a resource into Terraform state."""
-    success, output = run_terraform_cmd(["import", address, resource_id])
-    if success:
-        return True
-    return "Resource already managed" in output
+    """Import a resource into Terraform state with retries.
+
+    Returns True if the resource was successfully imported or already exists.
+    """
+    for attempt in range(1, IMPORT_RETRIES + 1):
+        success, output = run_terraform_cmd(["import", "-input=false", address, resource_id])
+        if success:
+            return True
+        if "Resource already managed" in output:
+            return True
+        if attempt < IMPORT_RETRIES:
+            print(f"    Retry {attempt}/{IMPORT_RETRIES - 1} after {IMPORT_RETRY_DELAY}s...")
+            time.sleep(IMPORT_RETRY_DELAY)
+    return False
 
 
 def get_account_ids_from_tfvars() -> dict:
@@ -104,13 +121,39 @@ def get_cross_account_session(account_id: str, region: str):
             aws_session_token=credentials["SessionToken"],
             region_name=region,
         )
-    except ClientError:
+    except ClientError as e:
+        print(f"    Failed to assume role into {account_id}: {e}")
         return None
 
 
 def region_to_module_suffix(region: str) -> str:
     """Convert region name to terraform module suffix (e.g., us-east-1 -> us_east_1)."""
     return region.replace("-", "_")
+
+
+def warm_up_providers():
+    """Run terraform refresh to initialize all provider credentials.
+
+    Each terraform import command re-initializes all 51 providers. Running
+    a refresh first caches provider credentials and validates connectivity,
+    preventing import failures due to provider initialization issues.
+    """
+    print("\n=== Warming Up Terraform Providers ===\n")
+    success, output = run_terraform_cmd(
+        ["plan", "-refresh-only", "-input=false", "-compact-warnings"],
+        timeout=300,
+    )
+    if success:
+        print("  Provider initialization successful")
+    else:
+        # Extract meaningful error lines (skip plan output noise)
+        error_lines = [line for line in output.split("\n") if "error" in line.lower() or "Error" in line]
+        if error_lines:
+            print("  Provider initialization warnings:")
+            for line in error_lines[:5]:
+                print(f"    {line.strip()}")
+        else:
+            print("  Provider initialization completed with warnings")
 
 
 def sync_cloudwatch_log_group(state_resources: set):
@@ -145,13 +188,10 @@ def sync_cloudwatch_log_group(state_resources: set):
     log_group_name = f"/{resource_prefix}/deployments/{deployment_name}"
 
     print(f"  Importing {tf_address} ({log_group_name})...")
-    success, output = run_terraform_cmd(["import", tf_address, log_group_name])
-    if success:
+    if import_resource(tf_address, log_group_name):
         print("    Imported successfully")
-    elif "Resource already managed" in output:
-        print("    Already in state")
     else:
-        print(f"    Import failed: {output[:200]}")
+        print("    Import failed (will be retried on next run)")
 
 
 def sync_guardduty_org_admin(config: dict, state_resources: set):
@@ -167,6 +207,7 @@ def sync_guardduty_org_admin(config: dict, state_resources: set):
     audit_account_id = account_ids["audit"]
     imported_count = 0
     skipped_count = 0
+    failed_count = 0
 
     for region in ALL_REGIONS:
         region_suffix = region_to_module_suffix(region)
@@ -186,18 +227,20 @@ def sync_guardduty_org_admin(config: dict, state_resources: set):
 
             if is_delegated_admin:
                 print(f"  Importing {admin_tf_address}...")
-                success, output = run_terraform_cmd(["import", admin_tf_address, audit_account_id])
-                if success:
+                if import_resource(admin_tf_address, audit_account_id):
                     print("    Imported successfully")
                     imported_count += 1
-                elif "Resource already managed" in output:
-                    skipped_count += 1
                 else:
-                    print(f"    Import failed: {output[:200]}")
-        except ClientError:
-            pass
+                    print(f"    Import failed for {region}")
+                    failed_count += 1
+        except ClientError as e:
+            print(f"    Error checking {region}: {e}")
+            failed_count += 1
 
-    print(f"\n  GuardDuty Delegated Admin: {imported_count} imported, {skipped_count} already in state")
+    summary = f"\n  GuardDuty Delegated Admin: {imported_count} imported, {skipped_count} already in state"
+    if failed_count:
+        summary += f", {failed_count} failed"
+    print(summary)
 
 
 def sync_guardduty_detectors(config: dict, management_account_id: str, state_resources: set):
@@ -216,6 +259,7 @@ def sync_guardduty_detectors(config: dict, management_account_id: str, state_res
 
     imported_count = 0
     skipped_count = 0
+    failed_count = 0
 
     account_prefix = "audit"
     assume_account_id = account_ids["audit"]
@@ -230,6 +274,7 @@ def sync_guardduty_detectors(config: dict, management_account_id: str, state_res
 
         session = get_cross_account_session(assume_account_id, region)
         if not session:
+            failed_count += 1
             continue
         gd_client = session.client("guardduty")
 
@@ -240,19 +285,20 @@ def sync_guardduty_detectors(config: dict, management_account_id: str, state_res
             if detector_ids:
                 detector_id = detector_ids[0]
                 print(f"  Importing {tf_address}...")
-                success, output = run_terraform_cmd(["import", tf_address, detector_id])
-                if success:
+                if import_resource(tf_address, detector_id):
                     print("    Imported successfully")
                     imported_count += 1
-                elif "Resource already managed" in output:
-                    print("    Already in state")
-                    skipped_count += 1
                 else:
-                    print(f"    Import failed: {output[:200]}")
-        except ClientError:
-            pass
+                    print(f"    Import failed for {region}")
+                    failed_count += 1
+        except ClientError as e:
+            print(f"    Error checking {region}: {e}")
+            failed_count += 1
 
-    print(f"\n  GuardDuty Detectors: {imported_count} imported, {skipped_count} already in state")
+    summary = f"\n  GuardDuty Detectors: {imported_count} imported, {skipped_count} already in state"
+    if failed_count:
+        summary += f", {failed_count} failed"
+    print(summary)
 
 
 def sync_guardduty_publishing_destinations(state_resources: set):
@@ -271,6 +317,7 @@ def sync_guardduty_publishing_destinations(state_resources: set):
 
     imported_count = 0
     skipped_count = 0
+    failed_count = 0
 
     for region in ALL_REGIONS:
         region_suffix = region_to_module_suffix(region)
@@ -282,6 +329,7 @@ def sync_guardduty_publishing_destinations(state_resources: set):
 
         session = get_cross_account_session(account_ids["audit"], region)
         if not session:
+            failed_count += 1
             continue
         gd_client = session.client("guardduty")
 
@@ -300,20 +348,21 @@ def sync_guardduty_publishing_destinations(state_resources: set):
                     dest_id = dest["DestinationId"]
                     import_id = f"{detector_id}:{dest_id}"
                     print(f"  Importing {tf_address}...")
-                    success, output = run_terraform_cmd(["import", tf_address, import_id])
-                    if success:
+                    if import_resource(tf_address, import_id):
                         print("    Imported successfully")
                         imported_count += 1
-                    elif "Resource already managed" in output:
-                        print("    Already in state")
-                        skipped_count += 1
                     else:
-                        print(f"    Import failed: {output[:200]}")
+                        print(f"    Import failed for {region}")
+                        failed_count += 1
                     break
-        except ClientError:
-            pass
+        except ClientError as e:
+            print(f"    Error checking {region}: {e}")
+            failed_count += 1
 
-    print(f"\n  GuardDuty Publishing Destinations: {imported_count} imported, {skipped_count} already in state")
+    summary = f"\n  GuardDuty Publishing Destinations: {imported_count} imported, {skipped_count} already in state"
+    if failed_count:
+        summary += f", {failed_count} failed"
+    print(summary)
 
 
 def main():
@@ -338,6 +387,12 @@ def main():
     # Get current Terraform state
     state_resources = get_state_resources()
     print(f"  Current state has {len(state_resources)} resources")
+
+    # Warm up all providers before running imports. Each terraform import
+    # command reinitializes all 51 providers. A refresh-only plan caches
+    # credentials and prevents import failures on empty state.
+    if len(state_resources) == 0:
+        warm_up_providers()
 
     # Sync CloudWatch log group (pre-created by entrypoint.sh before Terraform)
     sync_cloudwatch_log_group(state_resources)

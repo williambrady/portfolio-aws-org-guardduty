@@ -111,12 +111,20 @@ Resolved values:
   - `key` = `guardduty/terraform.tfstate`
   - `region` = `{primary_region}`
   - `encrypt` = `true`
-- Downloads provider plugins (hashicorp/aws ~> 5.0, hashicorp/time ~> 0.9)
+- Downloads provider plugins (hashicorp/aws ~> 5.0)
 - Initializes 51 provider configurations (17 management + 17 audit + 17 log-archive)
 
 ### 2.3 State Sync (state_sync.py)
 
 Imports existing AWS resources into Terraform state to avoid conflicts on first apply or after manual changes.
+
+#### 2.3.0 Provider Warm-Up (empty state only)
+
+- **Triggered when:** Terraform state has 0 resources (first deployment or after state reset)
+- Runs `terraform plan -refresh-only -input=false -compact-warnings` (timeout: 300s)
+- Initializes all 51 provider configurations and caches credentials
+- **Why:** Each `terraform import` reinitializes all 51 providers. On empty state, this causes silent import failures due to provider initialization issues or STS rate limiting. Running a refresh-only plan first ensures all providers are ready.
+- Import commands use retry logic (2 attempts with 5s delay) as defense-in-depth
 
 #### 2.3.1 Sync CloudWatch Log Group
 
@@ -178,11 +186,6 @@ Terraform creates/updates resources across three account contexts using 51 provi
   - `aws_guardduty_publishing_destination` for S3 findings export (conditional on `log_archive_account_id != ""`)
 - `depends_on` the corresponding `guardduty_org` module
 
-**Propagation Wait:**
-- `time_sleep.guardduty_delegated_admin_propagation` - 180 second wait
-- Depends on all 17 `guardduty_org` modules completing
-- Required for AWS to propagate delegated admin status before org config can be applied
-
 **Organization Configuration (17 regions):**
 - `module.guardduty_org_config_{region}` - Configures auto-enable and protection plans
 - Resources per region:
@@ -193,7 +196,7 @@ Terraform creates/updates resources across three account contexts using 51 provi
   - `aws_guardduty_organization_configuration_feature` for RUNTIME_MONITORING (auto_enable = ALL, with EKS/ECS/EC2 agent management)
   - `aws_guardduty_organization_configuration_feature` for LAMBDA_NETWORK_LOGS (auto_enable = ALL)
   - `aws_guardduty_organization_configuration_feature` for RDS_LOGIN_EVENTS (auto_enable = ALL)
-- `depends_on` the propagation wait and corresponding audit detector
+- `depends_on` the corresponding audit detector module
 
 ### 3.3 Log-Archive Account Resources
 

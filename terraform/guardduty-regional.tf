@@ -499,38 +499,6 @@ module "guardduty_audit_sa_east_1" {
 }
 
 # =============================================================================
-# Wait for GuardDuty Delegated Admin Propagation
-# =============================================================================
-# AWS needs time to propagate the delegated admin status across all regions
-# before the org configuration can be applied from the audit account.
-
-resource "time_sleep" "guardduty_delegated_admin_propagation" {
-  count = local.accounts_exist ? 1 : 0
-
-  create_duration = "180s"
-
-  depends_on = [
-    module.guardduty_org_us_east_1,
-    module.guardduty_org_us_east_2,
-    module.guardduty_org_us_west_1,
-    module.guardduty_org_us_west_2,
-    module.guardduty_org_eu_west_1,
-    module.guardduty_org_eu_west_2,
-    module.guardduty_org_eu_west_3,
-    module.guardduty_org_eu_central_1,
-    module.guardduty_org_eu_north_1,
-    module.guardduty_org_ap_southeast_1,
-    module.guardduty_org_ap_southeast_2,
-    module.guardduty_org_ap_northeast_1,
-    module.guardduty_org_ap_northeast_2,
-    module.guardduty_org_ap_northeast_3,
-    module.guardduty_org_ap_south_1,
-    module.guardduty_org_ca_central_1,
-    module.guardduty_org_sa_east_1,
-  ]
-}
-
-# =============================================================================
 # GuardDuty Organization Configuration (Audit Account - Delegated Admin)
 # =============================================================================
 # Configures auto-enable and protection plan settings for all member accounts.
@@ -546,7 +514,7 @@ module "guardduty_org_config_us_east_1" {
     aws = aws.audit
   }
 
-  depends_on = [time_sleep.guardduty_delegated_admin_propagation, module.guardduty_audit_us_east_1]
+  depends_on = [module.guardduty_audit_us_east_1]
 }
 
 module "guardduty_org_config_us_east_2" {
@@ -557,7 +525,7 @@ module "guardduty_org_config_us_east_2" {
     aws = aws.audit_us_east_2
   }
 
-  depends_on = [time_sleep.guardduty_delegated_admin_propagation, module.guardduty_audit_us_east_2]
+  depends_on = [module.guardduty_audit_us_east_2]
 }
 
 module "guardduty_org_config_us_west_1" {
@@ -568,7 +536,7 @@ module "guardduty_org_config_us_west_1" {
     aws = aws.audit_us_west_1
   }
 
-  depends_on = [time_sleep.guardduty_delegated_admin_propagation, module.guardduty_audit_us_west_1]
+  depends_on = [module.guardduty_audit_us_west_1]
 }
 
 module "guardduty_org_config_us_west_2" {
@@ -579,7 +547,7 @@ module "guardduty_org_config_us_west_2" {
     aws = aws.audit_us_west_2
   }
 
-  depends_on = [time_sleep.guardduty_delegated_admin_propagation, module.guardduty_audit_us_west_2]
+  depends_on = [module.guardduty_audit_us_west_2]
 }
 
 module "guardduty_org_config_eu_west_1" {
@@ -590,7 +558,7 @@ module "guardduty_org_config_eu_west_1" {
     aws = aws.audit_eu_west_1
   }
 
-  depends_on = [time_sleep.guardduty_delegated_admin_propagation, module.guardduty_audit_eu_west_1]
+  depends_on = [module.guardduty_audit_eu_west_1]
 }
 
 module "guardduty_org_config_eu_west_2" {
@@ -601,7 +569,7 @@ module "guardduty_org_config_eu_west_2" {
     aws = aws.audit_eu_west_2
   }
 
-  depends_on = [time_sleep.guardduty_delegated_admin_propagation, module.guardduty_audit_eu_west_2]
+  depends_on = [module.guardduty_audit_eu_west_2]
 }
 
 module "guardduty_org_config_eu_west_3" {
@@ -612,7 +580,7 @@ module "guardduty_org_config_eu_west_3" {
     aws = aws.audit_eu_west_3
   }
 
-  depends_on = [time_sleep.guardduty_delegated_admin_propagation, module.guardduty_audit_eu_west_3]
+  depends_on = [module.guardduty_audit_eu_west_3]
 }
 
 module "guardduty_org_config_eu_central_1" {
@@ -623,7 +591,7 @@ module "guardduty_org_config_eu_central_1" {
     aws = aws.audit_eu_central_1
   }
 
-  depends_on = [time_sleep.guardduty_delegated_admin_propagation, module.guardduty_audit_eu_central_1]
+  depends_on = [module.guardduty_audit_eu_central_1]
 }
 
 module "guardduty_org_config_eu_north_1" {
@@ -634,7 +602,7 @@ module "guardduty_org_config_eu_north_1" {
     aws = aws.audit_eu_north_1
   }
 
-  depends_on = [time_sleep.guardduty_delegated_admin_propagation, module.guardduty_audit_eu_north_1]
+  depends_on = [module.guardduty_audit_eu_north_1]
 }
 
 module "guardduty_org_config_ap_southeast_1" {
@@ -645,7 +613,7 @@ module "guardduty_org_config_ap_southeast_1" {
     aws = aws.audit_ap_southeast_1
   }
 
-  depends_on = [time_sleep.guardduty_delegated_admin_propagation, module.guardduty_audit_ap_southeast_1]
+  depends_on = [module.guardduty_audit_ap_southeast_1]
 }
 
 module "guardduty_org_config_ap_southeast_2" {
@@ -656,7 +624,7 @@ module "guardduty_org_config_ap_southeast_2" {
     aws = aws.audit_ap_southeast_2
   }
 
-  depends_on = [time_sleep.guardduty_delegated_admin_propagation, module.guardduty_audit_ap_southeast_2]
+  depends_on = [module.guardduty_audit_ap_southeast_2]
 }
 
 module "guardduty_org_config_ap_northeast_1" {
@@ -667,7 +635,7 @@ module "guardduty_org_config_ap_northeast_1" {
     aws = aws.audit_ap_northeast_1
   }
 
-  depends_on = [time_sleep.guardduty_delegated_admin_propagation, module.guardduty_audit_ap_northeast_1]
+  depends_on = [module.guardduty_audit_ap_northeast_1]
 }
 
 module "guardduty_org_config_ap_northeast_2" {
@@ -678,7 +646,7 @@ module "guardduty_org_config_ap_northeast_2" {
     aws = aws.audit_ap_northeast_2
   }
 
-  depends_on = [time_sleep.guardduty_delegated_admin_propagation, module.guardduty_audit_ap_northeast_2]
+  depends_on = [module.guardduty_audit_ap_northeast_2]
 }
 
 module "guardduty_org_config_ap_northeast_3" {
@@ -689,7 +657,7 @@ module "guardduty_org_config_ap_northeast_3" {
     aws = aws.audit_ap_northeast_3
   }
 
-  depends_on = [time_sleep.guardduty_delegated_admin_propagation, module.guardduty_audit_ap_northeast_3]
+  depends_on = [module.guardduty_audit_ap_northeast_3]
 }
 
 module "guardduty_org_config_ap_south_1" {
@@ -700,7 +668,7 @@ module "guardduty_org_config_ap_south_1" {
     aws = aws.audit_ap_south_1
   }
 
-  depends_on = [time_sleep.guardduty_delegated_admin_propagation, module.guardduty_audit_ap_south_1]
+  depends_on = [module.guardduty_audit_ap_south_1]
 }
 
 module "guardduty_org_config_ca_central_1" {
@@ -711,7 +679,7 @@ module "guardduty_org_config_ca_central_1" {
     aws = aws.audit_ca_central_1
   }
 
-  depends_on = [time_sleep.guardduty_delegated_admin_propagation, module.guardduty_audit_ca_central_1]
+  depends_on = [module.guardduty_audit_ca_central_1]
 }
 
 module "guardduty_org_config_sa_east_1" {
@@ -722,7 +690,7 @@ module "guardduty_org_config_sa_east_1" {
     aws = aws.audit_sa_east_1
   }
 
-  depends_on = [time_sleep.guardduty_delegated_admin_propagation, module.guardduty_audit_sa_east_1]
+  depends_on = [module.guardduty_audit_sa_east_1]
 }
 
 # =============================================================================
