@@ -243,12 +243,38 @@ def sync_guardduty_org_admin(config: dict, state_resources: set):
     print(summary)
 
 
+def cleanup_removed_resources(state_resources: set):
+    """Remove resources from state that are no longer in the Terraform config.
+
+    This handles migrations where resources are replaced by a different approach
+    (e.g., management detectors replaced by member enrollment via delegated admin).
+    """
+    print("\n=== Cleaning Up Removed Resources ===\n")
+
+    removed_count = 0
+    patterns = ["module.guardduty_mgmt_"]
+
+    for address in sorted(state_resources):
+        if any(address.startswith(p) for p in patterns):
+            print(f"  Removing {address} from state...")
+            success, output = run_terraform_cmd(["state", "rm", "-no-color", address])
+            if success:
+                print("    Removed successfully")
+                removed_count += 1
+            else:
+                print(f"    Remove failed: {output[:200]}")
+
+    if removed_count:
+        print(f"\n  Removed {removed_count} resources from state")
+    else:
+        print("  No resources to clean up")
+
+
 def sync_guardduty_detectors(config: dict, management_account_id: str, state_resources: set):
     """Sync GuardDuty detectors into Terraform state.
 
-    Syncs both management and audit account detectors. Management account
-    detectors use current credentials (no assume role). Audit account
-    detectors use cross-account role assumption.
+    Only syncs audit account detectors. Management and log-archive accounts
+    are enrolled as members by the org-config module via aws_guardduty_member.
     """
     print("\n=== Syncing GuardDuty Detectors ===\n")
 
@@ -262,47 +288,36 @@ def sync_guardduty_detectors(config: dict, management_account_id: str, state_res
     skipped_count = 0
     failed_count = 0
 
-    # Sync both management and audit account detectors
-    accounts_to_sync = [
-        ("mgmt", None),
-        ("audit", account_ids["audit"]),
-    ]
+    for region in ALL_REGIONS:
+        region_suffix = region_to_module_suffix(region)
+        tf_address = f"module.guardduty_audit_{region_suffix}[0].aws_guardduty_detector.main"
 
-    for account_prefix, assume_account_id in accounts_to_sync:
-        for region in ALL_REGIONS:
-            region_suffix = region_to_module_suffix(region)
-            tf_address = f"module.guardduty_{account_prefix}_{region_suffix}[0].aws_guardduty_detector.main"
+        if resource_exists_in_state(tf_address, state_resources):
+            skipped_count += 1
+            continue
 
-            if resource_exists_in_state(tf_address, state_resources):
-                skipped_count += 1
-                continue
+        session = get_cross_account_session(account_ids["audit"], region)
+        if not session:
+            failed_count += 1
+            continue
+        gd_client = session.client("guardduty")
 
-            # Management account uses current credentials, audit uses cross-account
-            if assume_account_id:
-                session = get_cross_account_session(assume_account_id, region)
-                if not session:
+        try:
+            response = gd_client.list_detectors()
+            detector_ids = response.get("DetectorIds", [])
+
+            if detector_ids:
+                detector_id = detector_ids[0]
+                print(f"  Importing {tf_address}...")
+                if import_resource(tf_address, detector_id):
+                    print("    Imported successfully")
+                    imported_count += 1
+                else:
+                    print(f"    Import failed for {region}")
                     failed_count += 1
-                    continue
-                gd_client = session.client("guardduty")
-            else:
-                gd_client = boto3.client("guardduty", region_name=region)
-
-            try:
-                response = gd_client.list_detectors()
-                detector_ids = response.get("DetectorIds", [])
-
-                if detector_ids:
-                    detector_id = detector_ids[0]
-                    print(f"  Importing {tf_address}...")
-                    if import_resource(tf_address, detector_id):
-                        print("    Imported successfully")
-                        imported_count += 1
-                    else:
-                        print(f"    Import failed for {account_prefix}/{region}")
-                        failed_count += 1
-            except ClientError as e:
-                print(f"    Error checking {account_prefix}/{region}: {e}")
-                failed_count += 1
+        except ClientError as e:
+            print(f"    Error checking {region}: {e}")
+            failed_count += 1
 
     summary = f"\n  GuardDuty Detectors: {imported_count} imported, {skipped_count} already in state"
     if failed_count:
@@ -396,6 +411,10 @@ def main():
     # Get current Terraform state
     state_resources = get_state_resources()
     print(f"  Current state has {len(state_resources)} resources")
+
+    # Clean up resources removed from config (e.g., guardduty_mgmt modules
+    # replaced by member enrollment via delegated admin)
+    cleanup_removed_resources(state_resources)
 
     # Warm up all providers before running imports. Each terraform import
     # command reinitializes all 51 providers. A refresh-only plan caches

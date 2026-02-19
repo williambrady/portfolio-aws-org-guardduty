@@ -12,6 +12,21 @@ locals {
   findings_bucket_arn  = local.log_archive_exists ? module.s3_guardduty_findings[0].bucket_arn : ""
   findings_kms_key_arn = local.log_archive_exists ? module.kms_guardduty_findings[0].key_arn : ""
 
+  # Accounts to enroll as GuardDuty members via the delegated admin.
+  # The management account is the org owner (not a member), so auto_enable
+  # does not cover it. Log-archive is a member but we enroll it explicitly
+  # to ensure it has a detector with all protection plans.
+  guardduty_member_accounts = concat(
+    [{
+      account_id = data.aws_caller_identity.current.account_id
+      email      = data.aws_organizations_account.management.email
+    }],
+    local.log_archive_exists ? [{
+      account_id = var.log_archive_account_id
+      email      = data.aws_organizations_account.log_archive[0].email
+    }] : []
+  )
+
   common_tags = merge(
     {
       ManagedBy      = "portfolio-aws-org-guardduty"
@@ -19,6 +34,19 @@ locals {
     },
     var.custom_tags
   )
+}
+
+# -----------------------------------------------------------------------------
+# Organization Account Data Sources (for GuardDuty member enrollment emails)
+# -----------------------------------------------------------------------------
+
+data "aws_organizations_account" "management" {
+  account_id = data.aws_caller_identity.current.account_id
+}
+
+data "aws_organizations_account" "log_archive" {
+  count      = local.log_archive_exists ? 1 : 0
+  account_id = var.log_archive_account_id
 }
 
 # -----------------------------------------------------------------------------

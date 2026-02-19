@@ -205,251 +205,6 @@ module "guardduty_org_sa_east_1" {
 }
 
 # =============================================================================
-# Management Account - GuardDuty Detectors
-# =============================================================================
-# The management account is NOT auto-enrolled by organization configuration
-# (auto_enable_organization_members = ALL only affects member accounts).
-# It requires an explicit detector to enable GuardDuty monitoring.
-
-module "guardduty_mgmt_us_east_1" {
-  source = "./modules/guardduty-enabler"
-
-  count = local.accounts_exist ? 1 : 0
-
-  common_tags = local.common_tags
-
-  providers = {
-    aws = aws
-  }
-
-  depends_on = [module.guardduty_org_us_east_1]
-}
-
-module "guardduty_mgmt_us_east_2" {
-  source = "./modules/guardduty-enabler"
-
-  count = local.accounts_exist ? 1 : 0
-
-  common_tags = local.common_tags
-
-  providers = {
-    aws = aws.us_east_2
-  }
-
-  depends_on = [module.guardduty_org_us_east_2]
-}
-
-module "guardduty_mgmt_us_west_1" {
-  source = "./modules/guardduty-enabler"
-
-  count = local.accounts_exist ? 1 : 0
-
-  common_tags = local.common_tags
-
-  providers = {
-    aws = aws.us_west_1
-  }
-
-  depends_on = [module.guardduty_org_us_west_1]
-}
-
-module "guardduty_mgmt_us_west_2" {
-  source = "./modules/guardduty-enabler"
-
-  count = local.accounts_exist ? 1 : 0
-
-  common_tags = local.common_tags
-
-  providers = {
-    aws = aws.us_west_2
-  }
-
-  depends_on = [module.guardduty_org_us_west_2]
-}
-
-module "guardduty_mgmt_eu_west_1" {
-  source = "./modules/guardduty-enabler"
-
-  count = local.accounts_exist ? 1 : 0
-
-  common_tags = local.common_tags
-
-  providers = {
-    aws = aws.eu_west_1
-  }
-
-  depends_on = [module.guardduty_org_eu_west_1]
-}
-
-module "guardduty_mgmt_eu_west_2" {
-  source = "./modules/guardduty-enabler"
-
-  count = local.accounts_exist ? 1 : 0
-
-  common_tags = local.common_tags
-
-  providers = {
-    aws = aws.eu_west_2
-  }
-
-  depends_on = [module.guardduty_org_eu_west_2]
-}
-
-module "guardduty_mgmt_eu_west_3" {
-  source = "./modules/guardduty-enabler"
-
-  count = local.accounts_exist ? 1 : 0
-
-  common_tags = local.common_tags
-
-  providers = {
-    aws = aws.eu_west_3
-  }
-
-  depends_on = [module.guardduty_org_eu_west_3]
-}
-
-module "guardduty_mgmt_eu_central_1" {
-  source = "./modules/guardduty-enabler"
-
-  count = local.accounts_exist ? 1 : 0
-
-  common_tags = local.common_tags
-
-  providers = {
-    aws = aws.eu_central_1
-  }
-
-  depends_on = [module.guardduty_org_eu_central_1]
-}
-
-module "guardduty_mgmt_eu_north_1" {
-  source = "./modules/guardduty-enabler"
-
-  count = local.accounts_exist ? 1 : 0
-
-  common_tags = local.common_tags
-
-  providers = {
-    aws = aws.eu_north_1
-  }
-
-  depends_on = [module.guardduty_org_eu_north_1]
-}
-
-module "guardduty_mgmt_ap_southeast_1" {
-  source = "./modules/guardduty-enabler"
-
-  count = local.accounts_exist ? 1 : 0
-
-  common_tags = local.common_tags
-
-  providers = {
-    aws = aws.ap_southeast_1
-  }
-
-  depends_on = [module.guardduty_org_ap_southeast_1]
-}
-
-module "guardduty_mgmt_ap_southeast_2" {
-  source = "./modules/guardduty-enabler"
-
-  count = local.accounts_exist ? 1 : 0
-
-  common_tags = local.common_tags
-
-  providers = {
-    aws = aws.ap_southeast_2
-  }
-
-  depends_on = [module.guardduty_org_ap_southeast_2]
-}
-
-module "guardduty_mgmt_ap_northeast_1" {
-  source = "./modules/guardduty-enabler"
-
-  count = local.accounts_exist ? 1 : 0
-
-  common_tags = local.common_tags
-
-  providers = {
-    aws = aws.ap_northeast_1
-  }
-
-  depends_on = [module.guardduty_org_ap_northeast_1]
-}
-
-module "guardduty_mgmt_ap_northeast_2" {
-  source = "./modules/guardduty-enabler"
-
-  count = local.accounts_exist ? 1 : 0
-
-  common_tags = local.common_tags
-
-  providers = {
-    aws = aws.ap_northeast_2
-  }
-
-  depends_on = [module.guardduty_org_ap_northeast_2]
-}
-
-module "guardduty_mgmt_ap_northeast_3" {
-  source = "./modules/guardduty-enabler"
-
-  count = local.accounts_exist ? 1 : 0
-
-  common_tags = local.common_tags
-
-  providers = {
-    aws = aws.ap_northeast_3
-  }
-
-  depends_on = [module.guardduty_org_ap_northeast_3]
-}
-
-module "guardduty_mgmt_ap_south_1" {
-  source = "./modules/guardduty-enabler"
-
-  count = local.accounts_exist ? 1 : 0
-
-  common_tags = local.common_tags
-
-  providers = {
-    aws = aws.ap_south_1
-  }
-
-  depends_on = [module.guardduty_org_ap_south_1]
-}
-
-module "guardduty_mgmt_ca_central_1" {
-  source = "./modules/guardduty-enabler"
-
-  count = local.accounts_exist ? 1 : 0
-
-  common_tags = local.common_tags
-
-  providers = {
-    aws = aws.ca_central_1
-  }
-
-  depends_on = [module.guardduty_org_ca_central_1]
-}
-
-module "guardduty_mgmt_sa_east_1" {
-  source = "./modules/guardduty-enabler"
-
-  count = local.accounts_exist ? 1 : 0
-
-  common_tags = local.common_tags
-
-  providers = {
-    aws = aws.sa_east_1
-  }
-
-  depends_on = [module.guardduty_org_sa_east_1]
-}
-
-# =============================================================================
 # Audit Account - GuardDuty Detectors (Delegated Admin)
 # =============================================================================
 # The audit account needs an explicit detector as the delegated administrator.
@@ -745,16 +500,19 @@ module "guardduty_audit_sa_east_1" {
 }
 
 # =============================================================================
-# GuardDuty Organization Configuration (Audit Account - Delegated Admin)
+# GuardDuty Organization Configuration + Member Enrollment
+# (Audit Account - Delegated Admin)
 # =============================================================================
-# Configures auto-enable and protection plan settings for all member accounts.
-# MUST run from AUDIT account (delegated admin) using the audit account's
-# detector ID. The delegated admin has permissions to call
-# UpdateOrganizationConfiguration for the organization.
+# Configures auto-enable and protection plan settings, then enrolls the
+# management and log-archive accounts as GuardDuty members. Member enrollment
+# creates detectors in those accounts with all protection plans enabled.
+# MUST run from AUDIT account (delegated admin).
 
 module "guardduty_org_config_us_east_1" {
   source = "./modules/guardduty-org-config"
   count  = local.accounts_exist ? 1 : 0
+
+  member_accounts = local.guardduty_member_accounts
 
   providers = {
     aws = aws.audit
@@ -767,6 +525,8 @@ module "guardduty_org_config_us_east_2" {
   source = "./modules/guardduty-org-config"
   count  = local.accounts_exist ? 1 : 0
 
+  member_accounts = local.guardduty_member_accounts
+
   providers = {
     aws = aws.audit_us_east_2
   }
@@ -777,6 +537,8 @@ module "guardduty_org_config_us_east_2" {
 module "guardduty_org_config_us_west_1" {
   source = "./modules/guardduty-org-config"
   count  = local.accounts_exist ? 1 : 0
+
+  member_accounts = local.guardduty_member_accounts
 
   providers = {
     aws = aws.audit_us_west_1
@@ -789,6 +551,8 @@ module "guardduty_org_config_us_west_2" {
   source = "./modules/guardduty-org-config"
   count  = local.accounts_exist ? 1 : 0
 
+  member_accounts = local.guardduty_member_accounts
+
   providers = {
     aws = aws.audit_us_west_2
   }
@@ -799,6 +563,8 @@ module "guardduty_org_config_us_west_2" {
 module "guardduty_org_config_eu_west_1" {
   source = "./modules/guardduty-org-config"
   count  = local.accounts_exist ? 1 : 0
+
+  member_accounts = local.guardduty_member_accounts
 
   providers = {
     aws = aws.audit_eu_west_1
@@ -811,6 +577,8 @@ module "guardduty_org_config_eu_west_2" {
   source = "./modules/guardduty-org-config"
   count  = local.accounts_exist ? 1 : 0
 
+  member_accounts = local.guardduty_member_accounts
+
   providers = {
     aws = aws.audit_eu_west_2
   }
@@ -821,6 +589,8 @@ module "guardduty_org_config_eu_west_2" {
 module "guardduty_org_config_eu_west_3" {
   source = "./modules/guardduty-org-config"
   count  = local.accounts_exist ? 1 : 0
+
+  member_accounts = local.guardduty_member_accounts
 
   providers = {
     aws = aws.audit_eu_west_3
@@ -833,6 +603,8 @@ module "guardduty_org_config_eu_central_1" {
   source = "./modules/guardduty-org-config"
   count  = local.accounts_exist ? 1 : 0
 
+  member_accounts = local.guardduty_member_accounts
+
   providers = {
     aws = aws.audit_eu_central_1
   }
@@ -843,6 +615,8 @@ module "guardduty_org_config_eu_central_1" {
 module "guardduty_org_config_eu_north_1" {
   source = "./modules/guardduty-org-config"
   count  = local.accounts_exist ? 1 : 0
+
+  member_accounts = local.guardduty_member_accounts
 
   providers = {
     aws = aws.audit_eu_north_1
@@ -855,6 +629,8 @@ module "guardduty_org_config_ap_southeast_1" {
   source = "./modules/guardduty-org-config"
   count  = local.accounts_exist ? 1 : 0
 
+  member_accounts = local.guardduty_member_accounts
+
   providers = {
     aws = aws.audit_ap_southeast_1
   }
@@ -865,6 +641,8 @@ module "guardduty_org_config_ap_southeast_1" {
 module "guardduty_org_config_ap_southeast_2" {
   source = "./modules/guardduty-org-config"
   count  = local.accounts_exist ? 1 : 0
+
+  member_accounts = local.guardduty_member_accounts
 
   providers = {
     aws = aws.audit_ap_southeast_2
@@ -877,6 +655,8 @@ module "guardduty_org_config_ap_northeast_1" {
   source = "./modules/guardduty-org-config"
   count  = local.accounts_exist ? 1 : 0
 
+  member_accounts = local.guardduty_member_accounts
+
   providers = {
     aws = aws.audit_ap_northeast_1
   }
@@ -887,6 +667,8 @@ module "guardduty_org_config_ap_northeast_1" {
 module "guardduty_org_config_ap_northeast_2" {
   source = "./modules/guardduty-org-config"
   count  = local.accounts_exist ? 1 : 0
+
+  member_accounts = local.guardduty_member_accounts
 
   providers = {
     aws = aws.audit_ap_northeast_2
@@ -899,6 +681,8 @@ module "guardduty_org_config_ap_northeast_3" {
   source = "./modules/guardduty-org-config"
   count  = local.accounts_exist ? 1 : 0
 
+  member_accounts = local.guardduty_member_accounts
+
   providers = {
     aws = aws.audit_ap_northeast_3
   }
@@ -909,6 +693,8 @@ module "guardduty_org_config_ap_northeast_3" {
 module "guardduty_org_config_ap_south_1" {
   source = "./modules/guardduty-org-config"
   count  = local.accounts_exist ? 1 : 0
+
+  member_accounts = local.guardduty_member_accounts
 
   providers = {
     aws = aws.audit_ap_south_1
@@ -921,6 +707,8 @@ module "guardduty_org_config_ca_central_1" {
   source = "./modules/guardduty-org-config"
   count  = local.accounts_exist ? 1 : 0
 
+  member_accounts = local.guardduty_member_accounts
+
   providers = {
     aws = aws.audit_ca_central_1
   }
@@ -931,6 +719,8 @@ module "guardduty_org_config_ca_central_1" {
 module "guardduty_org_config_sa_east_1" {
   source = "./modules/guardduty-org-config"
   count  = local.accounts_exist ? 1 : 0
+
+  member_accounts = local.guardduty_member_accounts
 
   providers = {
     aws = aws.audit_sa_east_1

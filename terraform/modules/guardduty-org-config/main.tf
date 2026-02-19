@@ -147,3 +147,23 @@ resource "aws_guardduty_organization_configuration_feature" "rds_login_events" {
 
   depends_on = [aws_guardduty_organization_configuration.main]
 }
+
+# -----------------------------------------------------------------------------
+# Member Enrollment
+# -----------------------------------------------------------------------------
+# Enrolls accounts as GuardDuty members via the delegated admin. This creates
+# detectors in those accounts with protection plans configured by the
+# organization configuration above.
+#
+# The management account is the org owner (not a member), so auto_enable does
+# not cover it. It must be explicitly enrolled here.
+
+resource "aws_guardduty_member" "members" {
+  for_each = { for m in var.member_accounts : m.account_id => m }
+
+  detector_id = data.aws_guardduty_detector.current.id
+  account_id  = each.value.account_id
+  email       = each.value.email
+
+  depends_on = [aws_guardduty_organization_configuration.main]
+}
