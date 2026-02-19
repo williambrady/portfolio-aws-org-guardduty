@@ -17,13 +17,13 @@ locals {
   # does not cover it. Log-archive is a member but we enroll it explicitly
   # to ensure it has a detector with all protection plans.
   guardduty_member_accounts = concat(
-    [{
+    var.management_account_email != "" ? [{
       account_id = data.aws_caller_identity.current.account_id
-      email      = data.aws_organizations_account.management.email
-    }],
-    local.log_archive_exists ? [{
+      email      = var.management_account_email
+    }] : [],
+    local.log_archive_exists && var.log_archive_account_email != "" ? [{
       account_id = var.log_archive_account_id
-      email      = data.aws_organizations_account.log_archive[0].email
+      email      = var.log_archive_account_email
     }] : []
   )
 
@@ -34,19 +34,6 @@ locals {
     },
     var.custom_tags
   )
-}
-
-# -----------------------------------------------------------------------------
-# Organization Account Data Sources (for GuardDuty member enrollment emails)
-# -----------------------------------------------------------------------------
-
-data "aws_organizations_account" "management" {
-  account_id = data.aws_caller_identity.current.account_id
-}
-
-data "aws_organizations_account" "log_archive" {
-  count      = local.log_archive_exists ? 1 : 0
-  account_id = var.log_archive_account_id
 }
 
 # -----------------------------------------------------------------------------

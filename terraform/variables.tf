@@ -33,6 +33,18 @@ variable "log_archive_account_id" {
   default     = ""
 }
 
+variable "management_account_email" {
+  description = "Email of the management account for GuardDuty member enrollment (auto-discovered)"
+  type        = string
+  default     = ""
+}
+
+variable "log_archive_account_email" {
+  description = "Email of the log-archive account for GuardDuty member enrollment (auto-discovered)"
+  type        = string
+  default     = ""
+}
+
 variable "access_logs_bucket_exists" {
   description = "Whether the access logs bucket exists in the log-archive account (auto-discovered)"
   type        = bool
