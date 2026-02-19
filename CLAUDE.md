@@ -23,13 +23,16 @@ AWS GuardDuty organization-wide deployment using Terraform wrapped in Docker. De
 ### Data Flow
 
 ```
-config.yaml → discover.py → bootstrap.auto.tfvars.json → state_sync.py → Terraform → AWS
+config.yaml + SSM Parameter → discover.py → bootstrap.auto.tfvars.json → state_sync.py → Terraform → AWS
 ```
+
+Discovery reads `/{resource_prefix}/org-baseline/config` from SSM Parameter Store (written by `portfolio-aws-org-baseline`) to auto-discover `audit_account_id`, `primary_region`, `tags`, etc. Falls back to `config.yaml` values if SSM is unavailable.
 
 ### Account Types
 
 - **Management Account** - AWS Organization root, runs Terraform, registers delegated admin
 - **Audit Account** - Delegated admin for GuardDuty, hosts detectors and org configuration
+- **Log-Archive Account** - Hosts centralized findings export S3 bucket and KMS key (conditional on `log_archive_account_id`)
 
 ### Three-Phase GuardDuty Architecture
 
@@ -46,20 +49,23 @@ portfolio-aws-org-guardduty/
 ├── requirements.txt        # Python dependencies
 ├── discovery/
 │   ├── discover.py         # AWS discovery, generates tfvars
-│   └── state_sync.py       # Terraform state synchronization
+│   ├── state_sync.py       # Terraform state synchronization
+│   └── cloudwatch_logger.py # CloudWatch Logs streaming helper
 ├── post-deployment/
-│   └── verify-guardduty.py # GuardDuty verification
+│   └── verify-guardduty.py # GuardDuty verification (5 checks)
 ├── terraform/
-│   ├── main.tf             # Root module
+│   ├── main.tf             # Root module (KMS, S3, CloudWatch)
 │   ├── variables.tf        # Variable definitions
 │   ├── outputs.tf          # Output definitions
-│   ├── providers.tf        # Provider configurations (34 providers)
+│   ├── providers.tf        # Provider configurations (51 providers)
 │   ├── versions.tf         # Terraform/provider version constraints
-│   ├── guardduty-regional.tf  # Multi-region deployment (676 lines)
+│   ├── guardduty-regional.tf  # Multi-region deployment
 │   └── modules/
 │       ├── guardduty-org/        # Per-region delegated admin registration
-│       ├── guardduty-enabler/    # Single-region detector enablement
-│       └── guardduty-org-config/ # Per-region organization configuration
+│       ├── guardduty-enabler/    # Single-region detector + findings export
+│       ├── guardduty-org-config/ # Per-region organization configuration
+│       ├── kms/                  # Reusable KMS key module
+│       └── s3/                   # Reusable S3 bucket module
 ├── Dockerfile
 └── Makefile
 ```
@@ -101,7 +107,8 @@ Edit `config.yaml` to customize:
 
 - 17 management account regional providers (default + 16 aliases)
 - 17 audit account regional providers with cross-account role assumption
-- Total: 34 providers
+- 17 log-archive account regional providers with cross-account role assumption
+- Total: 51 providers
 
 ### Key Modules
 
@@ -111,6 +118,7 @@ Edit `config.yaml` to customize:
 **GuardDuty Enabler Module** - Enables detector (audit account context):
 - `aws_guardduty_detector` with S3, K8s, malware protection
 - `aws_guardduty_detector_feature` for Lambda and RDS protection
+- `aws_guardduty_publishing_destination` for S3 findings export (conditional)
 
 **GuardDuty Org Config Module** - Organization-wide settings (audit account context):
 - `aws_guardduty_organization_configuration` with auto_enable = ALL
@@ -125,6 +133,7 @@ Validates GuardDuty configuration across all 17 regions:
 - Delegated admin correctly configured
 - Organization auto-enable applied
 - Detectors enabled in management, log-archive, and audit accounts
+- Publishing destinations active and exporting to S3
 
 ## Rules
 

@@ -3,20 +3,16 @@
 # It assumes the AWS Organization and delegated admin service principals
 # are already configured by portfolio-aws-org-baseline.
 
-# REQUIRED: Primary AWS region for state and finding aggregation
-primary_region: "us-east-1"
-
 # REQUIRED: Prefix for all AWS resource names (S3 state bucket, etc.)
+# Also used to locate the org-baseline SSM parameter at /{resource_prefix}/org-baseline/config
 resource_prefix: "ccoe"
 
-# REQUIRED: Audit account ID (delegated admin for GuardDuty)
-# This account must already exist in the organization
-audit_account_id: ""
+# Deployment name (used for CloudWatch log group naming)
+deployment_name: "portfolio-aws-org-guardduty"
 
 # Cross-account role name (default: OrganizationAccountAccessRole)
 audit_account_role: "OrganizationAccountAccessRole"
 
-# Custom tags applied to all resources
-tags:
-  owner: "william.brady"
-  contact: "will@crofton.cloud"
+# Optional overrides (auto-discovered from org-baseline SSM parameter if omitted)
+# primary_region: "us-east-1"
+# audit_account_id: ""

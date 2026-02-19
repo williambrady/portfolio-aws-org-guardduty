@@ -32,138 +32,124 @@ echo ""
 # Load configuration from config.yaml
 echo -e "${YELLOW}Loading configuration...${NC}"
 
-PRIMARY_REGION=$(python3 -c "import yaml; print(yaml.safe_load(open('/work/config.yaml'))['primary_region'])" 2>/dev/null || echo "us-east-1")
+PRIMARY_REGION=$(python3 -c "import yaml; print(yaml.safe_load(open('/work/config.yaml')).get('primary_region', 'us-east-1'))" 2>/dev/null || echo "us-east-1")
 RESOURCE_PREFIX=$(python3 -c "import yaml; print(yaml.safe_load(open('/work/config.yaml'))['resource_prefix'])" 2>/dev/null)
 if [ -z "${RESOURCE_PREFIX}" ]; then
     echo -e "${RED}Error: resource_prefix is required in config.yaml${NC}"
     exit 1
 fi
+DEPLOYMENT_NAME=$(python3 -c "import yaml; v=yaml.safe_load(open('/work/config.yaml')).get('deployment_name'); print(v if v else '')" 2>/dev/null)
+if [ -z "${DEPLOYMENT_NAME}" ]; then
+    echo -e "${RED}Error: deployment_name is required in config.yaml${NC}"
+    exit 1
+fi
 echo -e "${GREEN}Primary region: ${PRIMARY_REGION}${NC}"
 echo -e "${GREEN}Resource prefix: ${RESOURCE_PREFIX}${NC}"
+echo -e "${GREEN}Deployment name: ${DEPLOYMENT_NAME}${NC}"
 echo ""
 
-# State bucket configuration
-STATE_BUCKET="${RESOURCE_PREFIX}-guardduty-tfstate-${ACCOUNT_ID}"
+# Parse command line arguments (needed early for timestamp)
+ACTION="${1:-apply}"
+TERRAFORM_ARGS="${@:2}"
+
+# Deployment logging to CloudWatch Logs (always enabled)
+DEPLOY_TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
+CW_LOG_GROUP="/${RESOURCE_PREFIX}/deployments/${DEPLOYMENT_NAME}"
+CW_LOG_PREFIX="${DEPLOY_TIMESTAMP}"
+CW_INITIAL_STREAM="${CW_LOG_PREFIX}/config"
+echo -e "${YELLOW}Streaming deployment logs to CloudWatch Logs${NC}"
+echo -e "${BLUE}  Log group:  ${CW_LOG_GROUP}${NC}"
+echo -e "${BLUE}  Log prefix: ${CW_LOG_PREFIX}/${NC}"
+
+# Ensure log group exists before Terraform runs (idempotent)
+# Terraform is the source of truth for retention and tags
+aws logs create-log-group --log-group-name "${CW_LOG_GROUP}" \
+    --region "${PRIMARY_REGION}" 2>/dev/null || true
+aws logs create-log-stream --log-group-name "${CW_LOG_GROUP}" \
+    --log-stream-name "${CW_INITIAL_STREAM}" \
+    --region "${PRIMARY_REGION}" 2>/dev/null || true
+
+CW_FIFO="/tmp/cw-fifo-$$"
+mkfifo "${CW_FIFO}"
+python3 /work/discovery/cloudwatch_logger.py \
+    "${CW_LOG_GROUP}" "${CW_INITIAL_STREAM}" "${PRIMARY_REGION}" < "${CW_FIFO}" &
+CW_LOGGER_PID=$!
+exec 3>"${CW_FIFO}"
+
+# Helper to tee output to stdout and CloudWatch Logs.
+# Usage: some_command 2>&1 | tee_log <phase>
+# The phase is used to create a separate CloudWatch log stream per phase.
+tee_log() {
+    local phase="${1:-}"
+    if [ -n "${CW_LOGGER_PID}" ] && kill -0 "${CW_LOGGER_PID}" 2>/dev/null; then
+        if [ -n "${phase}" ]; then
+            printf '\n###STREAM:%s\n' "${CW_LOG_PREFIX}/${phase}" >&3
+        fi
+        tee /dev/fd/3
+    else
+        cat
+    fi
+}
+
+# EXIT trap to clean up CloudWatch logger on any exit
+cleanup_logger() {
+    local exit_code=$?
+
+    # Close CloudWatch logger
+    if [ -n "${CW_LOGGER_PID:-}" ]; then
+        exec 3>&- 2>/dev/null || true
+        wait "${CW_LOGGER_PID}" 2>/dev/null || true
+        rm -f "${CW_FIFO}" 2>/dev/null || true
+    fi
+
+    exit $exit_code
+}
+trap cleanup_logger EXIT
+
+# Capture runtime configuration as the first log stream
+{
+    echo "Runtime Configuration"
+    echo "=================================================="
+    echo ""
+    echo "Timestamp:      $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    echo "Action:         ${ACTION}"
+    echo "Account ID:     ${ACCOUNT_ID}"
+    echo "Caller ARN:     ${CALLER_ARN}"
+    echo "Terraform Args: ${TERRAFORM_ARGS:-<none>}"
+    echo ""
+    echo "Effective Settings:"
+    echo "  resource_prefix:    ${RESOURCE_PREFIX}"
+    echo "  deployment_name:    ${DEPLOYMENT_NAME}"
+    echo "  primary_region:     ${PRIMARY_REGION}"
+    echo ""
+    echo "config.yaml:"
+    echo "=================================================="
+    cat /work/config.yaml
+    echo ""
+    echo "=================================================="
+} 2>&1 | tee_log "config"
+
+# State bucket configuration - reuse the org-baseline state bucket with a separate key prefix
+STATE_BUCKET="${RESOURCE_PREFIX}-tfstate-${ACCOUNT_ID}"
 STATE_KEY="guardduty/terraform.tfstate"
 STATE_REGION="${PRIMARY_REGION}"
 
-# Step 1: Create state bucket if it doesn't exist (bootstrap only)
+# Verify the state bucket exists (created by portfolio-aws-org-baseline)
 echo -e "${YELLOW}Checking Terraform state bucket...${NC}"
 if ! aws s3api head-bucket --bucket "${STATE_BUCKET}" 2>/dev/null; then
-    echo -e "${YELLOW}Creating state bucket: ${STATE_BUCKET}${NC}"
-
-    # Create KMS key for state bucket
-    echo -e "${YELLOW}Creating KMS key for state bucket...${NC}"
-    KMS_KEY_ID=$(aws kms create-key \
-        --description "KMS key for GuardDuty Terraform state bucket encryption" \
-        --tags TagKey=Name,TagValue=${RESOURCE_PREFIX}-guardduty-tfstate-key \
-               TagKey=Purpose,TagValue="S3 bucket encryption" \
-               TagKey=ProtectsBucket,TagValue="${STATE_BUCKET}" \
-               TagKey=ManagedBy,TagValue=portfolio-aws-org-guardduty \
-        --region "${STATE_REGION}" \
-        --query 'KeyMetadata.KeyId' \
-        --output text \
-        --no-cli-pager)
-
-    # Create alias for the key
-    aws kms create-alias \
-        --alias-name "alias/${RESOURCE_PREFIX}-guardduty-tfstate" \
-        --target-key-id "${KMS_KEY_ID}" \
-        --region "${STATE_REGION}" \
-        --no-cli-pager
-
-    # Enable key rotation
-    aws kms enable-key-rotation \
-        --key-id "${KMS_KEY_ID}" \
-        --region "${STATE_REGION}" \
-        --no-cli-pager
-
-    KMS_KEY_ARN="arn:aws:kms:${STATE_REGION}:${ACCOUNT_ID}:key/${KMS_KEY_ID}"
-
-    # Create bucket (us-east-1 doesn't use LocationConstraint)
-    if [ "${STATE_REGION}" = "us-east-1" ]; then
-        aws s3api create-bucket \
-            --bucket "${STATE_BUCKET}" \
-            --region "${STATE_REGION}" \
-            --no-cli-pager
-    else
-        aws s3api create-bucket \
-            --bucket "${STATE_BUCKET}" \
-            --region "${STATE_REGION}" \
-            --create-bucket-configuration LocationConstraint="${STATE_REGION}" \
-            --no-cli-pager
-    fi
-
-    # Enable versioning
-    aws s3api put-bucket-versioning \
-        --bucket "${STATE_BUCKET}" \
-        --versioning-configuration Status=Enabled \
-        --no-cli-pager
-
-    # Enable KMS encryption
-    aws s3api put-bucket-encryption \
-        --bucket "${STATE_BUCKET}" \
-        --server-side-encryption-configuration "{
-            \"Rules\": [{
-                \"ApplyServerSideEncryptionByDefault\": {
-                    \"SSEAlgorithm\": \"aws:kms\",
-                    \"KMSMasterKeyID\": \"${KMS_KEY_ARN}\"
-                },
-                \"BucketKeyEnabled\": true
-            }]
-        }" \
-        --no-cli-pager
-
-    # Block public access
-    aws s3api put-public-access-block \
-        --bucket "${STATE_BUCKET}" \
-        --public-access-block-configuration '{
-            "BlockPublicAcls": true,
-            "IgnorePublicAcls": true,
-            "BlockPublicPolicy": true,
-            "RestrictPublicBuckets": true
-        }' \
-        --no-cli-pager
-
-    # Add bucket policy for SSL enforcement
-    aws s3api put-bucket-policy \
-        --bucket "${STATE_BUCKET}" \
-        --policy "{
-            \"Version\": \"2012-10-17\",
-            \"Statement\": [
-                {
-                    \"Sid\": \"DenyNonSSL\",
-                    \"Effect\": \"Deny\",
-                    \"Principal\": \"*\",
-                    \"Action\": \"s3:*\",
-                    \"Resource\": [
-                        \"arn:aws:s3:::${STATE_BUCKET}\",
-                        \"arn:aws:s3:::${STATE_BUCKET}/*\"
-                    ],
-                    \"Condition\": {
-                        \"Bool\": {
-                            \"aws:SecureTransport\": \"false\"
-                        }
-                    }
-                }
-            ]
-        }" \
-        --no-cli-pager
-
-    echo -e "${GREEN}State bucket created with KMS encryption${NC}"
-else
-    echo -e "${GREEN}State bucket exists${NC}"
+    echo -e "${RED}Error: State bucket '${STATE_BUCKET}' does not exist${NC}"
+    echo "The state bucket must be created by portfolio-aws-org-baseline first."
+    echo "Run 'make apply' in portfolio-aws-org-baseline before deploying GuardDuty."
+    exit 1
 fi
+echo -e "${GREEN}State bucket exists: ${STATE_BUCKET}${NC}"
+echo -e "${GREEN}State key: ${STATE_KEY}${NC}"
 echo ""
-
-# Parse command line arguments
-ACTION="${1:-apply}"
-TERRAFORM_ARGS="${@:2}"
 
 case "$ACTION" in
     discover)
         echo -e "${YELLOW}Running discovery only...${NC}"
-        python3 /work/discovery/discover.py
+        python3 /work/discovery/discover.py 2>&1 | tee_log "discover"
         exit 0
         ;;
     shell)
@@ -191,7 +177,7 @@ echo "============================================"
 echo "  Phase 1: Discovery"
 echo "============================================"
 echo ""
-python3 /work/discovery/discover.py
+python3 /work/discovery/discover.py 2>&1 | tee_log "discover"
 echo ""
 
 # Phase 2: Terraform Init
@@ -208,26 +194,16 @@ rm -rf .terraform .terraform.lock.hcl
 
 # Initialize Terraform with S3 backend
 echo -e "${YELLOW}Initializing Terraform...${NC}"
-STATE_EXISTS=$(aws s3api head-object --bucket "${STATE_BUCKET}" --key "${STATE_KEY}" 2>/dev/null && echo "true" || echo "false")
-
-if [ "${STATE_EXISTS}" = "true" ]; then
-    terraform init -input=false \
-        -backend-config="bucket=${STATE_BUCKET}" \
-        -backend-config="key=${STATE_KEY}" \
-        -backend-config="region=${STATE_REGION}" \
-        -backend-config="encrypt=true"
-else
-    terraform init -input=false -reconfigure \
-        -backend-config="bucket=${STATE_BUCKET}" \
-        -backend-config="key=${STATE_KEY}" \
-        -backend-config="region=${STATE_REGION}" \
-        -backend-config="encrypt=true"
-fi
+terraform init -input=false -reconfigure \
+    -backend-config="bucket=${STATE_BUCKET}" \
+    -backend-config="key=${STATE_KEY}" \
+    -backend-config="region=${STATE_REGION}" \
+    -backend-config="encrypt=true" 2>&1 | tee_log "init"
 
 # Sync existing resources into Terraform state
 echo ""
 echo -e "${YELLOW}Syncing Terraform state with existing resources...${NC}"
-python3 /work/discovery/state_sync.py
+python3 /work/discovery/state_sync.py 2>&1 | tee_log "import"
 
 # Phase 3: Terraform Plan/Apply
 echo ""
@@ -237,7 +213,7 @@ echo "============================================"
 echo ""
 
 echo -e "${YELLOW}Running terraform ${TF_ACTION}...${NC}"
-terraform ${TF_ACTION} ${TERRAFORM_ARGS}
+terraform ${TF_ACTION} ${TERRAFORM_ARGS} 2>&1 | tee_log "${TF_ACTION%% *}"
 
 # Phase 4: Post-Deployment Verification
 if [ "$TF_ACTION" = "plan" ]; then
@@ -247,7 +223,7 @@ if [ "$TF_ACTION" = "plan" ]; then
     echo "============================================"
     echo ""
     echo -e "${YELLOW}Verifying GuardDuty organization configuration...${NC}"
-    python3 /work/post-deployment/verify-guardduty.py || true
+    python3 /work/post-deployment/verify-guardduty.py 2>&1 | tee_log "verify" || true
     echo ""
 fi
 
@@ -259,8 +235,8 @@ if [ "$TF_ACTION" = "apply -auto-approve" ]; then
     echo ""
 
     echo -e "${YELLOW}Verifying GuardDuty organization configuration...${NC}"
-    python3 /work/post-deployment/verify-guardduty.py || true
-    GUARDDUTY_EXIT_CODE=$?
+    GUARDDUTY_EXIT_CODE=0
+    python3 /work/post-deployment/verify-guardduty.py 2>&1 | tee_log "verify" || GUARDDUTY_EXIT_CODE=$?
 
     if [ $GUARDDUTY_EXIT_CODE -eq 0 ]; then
         echo -e "${GREEN}GuardDuty organization verification completed successfully${NC}"
@@ -277,7 +253,7 @@ if [ "$TF_ACTION" = "apply -auto-approve" ]; then
     echo "  Phase 5: Summary"
     echo "============================================"
     echo ""
-    terraform output -json guardduty_summary 2>/dev/null | jq . || echo "No summary output available"
+    terraform output -json guardduty_summary 2>/dev/null | jq . | tee_log "summary" || echo "No summary output available"
     echo ""
     echo -e "${GREEN}GuardDuty organization deployment complete!${NC}"
 fi

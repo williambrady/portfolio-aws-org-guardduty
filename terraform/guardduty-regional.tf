@@ -211,7 +211,13 @@ module "guardduty_org_sa_east_1" {
 
 module "guardduty_audit_us_east_1" {
   source = "./modules/guardduty-enabler"
-  count  = local.accounts_exist ? 1 : 0
+
+  count = local.accounts_exist ? 1 : 0
+
+  common_tags             = local.common_tags
+  findings_export_enabled = local.log_archive_exists
+  findings_bucket_arn     = local.findings_bucket_arn
+  findings_kms_key_arn    = local.findings_kms_key_arn
 
   providers = {
     aws = aws.audit
@@ -222,7 +228,13 @@ module "guardduty_audit_us_east_1" {
 
 module "guardduty_audit_us_east_2" {
   source = "./modules/guardduty-enabler"
-  count  = local.accounts_exist ? 1 : 0
+
+  count = local.accounts_exist ? 1 : 0
+
+  common_tags             = local.common_tags
+  findings_export_enabled = local.log_archive_exists
+  findings_bucket_arn     = local.findings_bucket_arn
+  findings_kms_key_arn    = local.findings_kms_key_arn
 
   providers = {
     aws = aws.audit_us_east_2
@@ -233,7 +245,13 @@ module "guardduty_audit_us_east_2" {
 
 module "guardduty_audit_us_west_1" {
   source = "./modules/guardduty-enabler"
-  count  = local.accounts_exist ? 1 : 0
+
+  count = local.accounts_exist ? 1 : 0
+
+  common_tags             = local.common_tags
+  findings_export_enabled = local.log_archive_exists
+  findings_bucket_arn     = local.findings_bucket_arn
+  findings_kms_key_arn    = local.findings_kms_key_arn
 
   providers = {
     aws = aws.audit_us_west_1
@@ -244,7 +262,13 @@ module "guardduty_audit_us_west_1" {
 
 module "guardduty_audit_us_west_2" {
   source = "./modules/guardduty-enabler"
-  count  = local.accounts_exist ? 1 : 0
+
+  count = local.accounts_exist ? 1 : 0
+
+  common_tags             = local.common_tags
+  findings_export_enabled = local.log_archive_exists
+  findings_bucket_arn     = local.findings_bucket_arn
+  findings_kms_key_arn    = local.findings_kms_key_arn
 
   providers = {
     aws = aws.audit_us_west_2
@@ -255,7 +279,13 @@ module "guardduty_audit_us_west_2" {
 
 module "guardduty_audit_eu_west_1" {
   source = "./modules/guardduty-enabler"
-  count  = local.accounts_exist ? 1 : 0
+
+  count = local.accounts_exist ? 1 : 0
+
+  common_tags             = local.common_tags
+  findings_export_enabled = local.log_archive_exists
+  findings_bucket_arn     = local.findings_bucket_arn
+  findings_kms_key_arn    = local.findings_kms_key_arn
 
   providers = {
     aws = aws.audit_eu_west_1
@@ -266,7 +296,13 @@ module "guardduty_audit_eu_west_1" {
 
 module "guardduty_audit_eu_west_2" {
   source = "./modules/guardduty-enabler"
-  count  = local.accounts_exist ? 1 : 0
+
+  count = local.accounts_exist ? 1 : 0
+
+  common_tags             = local.common_tags
+  findings_export_enabled = local.log_archive_exists
+  findings_bucket_arn     = local.findings_bucket_arn
+  findings_kms_key_arn    = local.findings_kms_key_arn
 
   providers = {
     aws = aws.audit_eu_west_2
@@ -277,7 +313,13 @@ module "guardduty_audit_eu_west_2" {
 
 module "guardduty_audit_eu_west_3" {
   source = "./modules/guardduty-enabler"
-  count  = local.accounts_exist ? 1 : 0
+
+  count = local.accounts_exist ? 1 : 0
+
+  common_tags             = local.common_tags
+  findings_export_enabled = local.log_archive_exists
+  findings_bucket_arn     = local.findings_bucket_arn
+  findings_kms_key_arn    = local.findings_kms_key_arn
 
   providers = {
     aws = aws.audit_eu_west_3
@@ -288,7 +330,13 @@ module "guardduty_audit_eu_west_3" {
 
 module "guardduty_audit_eu_central_1" {
   source = "./modules/guardduty-enabler"
-  count  = local.accounts_exist ? 1 : 0
+
+  count = local.accounts_exist ? 1 : 0
+
+  common_tags             = local.common_tags
+  findings_export_enabled = local.log_archive_exists
+  findings_bucket_arn     = local.findings_bucket_arn
+  findings_kms_key_arn    = local.findings_kms_key_arn
 
   providers = {
     aws = aws.audit_eu_central_1
@@ -299,7 +347,13 @@ module "guardduty_audit_eu_central_1" {
 
 module "guardduty_audit_eu_north_1" {
   source = "./modules/guardduty-enabler"
-  count  = local.accounts_exist ? 1 : 0
+
+  count = local.accounts_exist ? 1 : 0
+
+  common_tags             = local.common_tags
+  findings_export_enabled = local.log_archive_exists
+  findings_bucket_arn     = local.findings_bucket_arn
+  findings_kms_key_arn    = local.findings_kms_key_arn
 
   providers = {
     aws = aws.audit_eu_north_1
@@ -310,7 +364,13 @@ module "guardduty_audit_eu_north_1" {
 
 module "guardduty_audit_ap_southeast_1" {
   source = "./modules/guardduty-enabler"
-  count  = local.accounts_exist ? 1 : 0
+
+  count = local.accounts_exist ? 1 : 0
+
+  common_tags             = local.common_tags
+  findings_export_enabled = local.log_archive_exists
+  findings_bucket_arn     = local.findings_bucket_arn
+  findings_kms_key_arn    = local.findings_kms_key_arn
 
   providers = {
     aws = aws.audit_ap_southeast_1
@@ -321,7 +381,13 @@ module "guardduty_audit_ap_southeast_1" {
 
 module "guardduty_audit_ap_southeast_2" {
   source = "./modules/guardduty-enabler"
-  count  = local.accounts_exist ? 1 : 0
+
+  count = local.accounts_exist ? 1 : 0
+
+  common_tags             = local.common_tags
+  findings_export_enabled = local.log_archive_exists
+  findings_bucket_arn     = local.findings_bucket_arn
+  findings_kms_key_arn    = local.findings_kms_key_arn
 
   providers = {
     aws = aws.audit_ap_southeast_2
@@ -332,7 +398,13 @@ module "guardduty_audit_ap_southeast_2" {
 
 module "guardduty_audit_ap_northeast_1" {
   source = "./modules/guardduty-enabler"
-  count  = local.accounts_exist ? 1 : 0
+
+  count = local.accounts_exist ? 1 : 0
+
+  common_tags             = local.common_tags
+  findings_export_enabled = local.log_archive_exists
+  findings_bucket_arn     = local.findings_bucket_arn
+  findings_kms_key_arn    = local.findings_kms_key_arn
 
   providers = {
     aws = aws.audit_ap_northeast_1
@@ -343,7 +415,13 @@ module "guardduty_audit_ap_northeast_1" {
 
 module "guardduty_audit_ap_northeast_2" {
   source = "./modules/guardduty-enabler"
-  count  = local.accounts_exist ? 1 : 0
+
+  count = local.accounts_exist ? 1 : 0
+
+  common_tags             = local.common_tags
+  findings_export_enabled = local.log_archive_exists
+  findings_bucket_arn     = local.findings_bucket_arn
+  findings_kms_key_arn    = local.findings_kms_key_arn
 
   providers = {
     aws = aws.audit_ap_northeast_2
@@ -354,7 +432,13 @@ module "guardduty_audit_ap_northeast_2" {
 
 module "guardduty_audit_ap_northeast_3" {
   source = "./modules/guardduty-enabler"
-  count  = local.accounts_exist ? 1 : 0
+
+  count = local.accounts_exist ? 1 : 0
+
+  common_tags             = local.common_tags
+  findings_export_enabled = local.log_archive_exists
+  findings_bucket_arn     = local.findings_bucket_arn
+  findings_kms_key_arn    = local.findings_kms_key_arn
 
   providers = {
     aws = aws.audit_ap_northeast_3
@@ -365,7 +449,13 @@ module "guardduty_audit_ap_northeast_3" {
 
 module "guardduty_audit_ap_south_1" {
   source = "./modules/guardduty-enabler"
-  count  = local.accounts_exist ? 1 : 0
+
+  count = local.accounts_exist ? 1 : 0
+
+  common_tags             = local.common_tags
+  findings_export_enabled = local.log_archive_exists
+  findings_bucket_arn     = local.findings_bucket_arn
+  findings_kms_key_arn    = local.findings_kms_key_arn
 
   providers = {
     aws = aws.audit_ap_south_1
@@ -376,7 +466,13 @@ module "guardduty_audit_ap_south_1" {
 
 module "guardduty_audit_ca_central_1" {
   source = "./modules/guardduty-enabler"
-  count  = local.accounts_exist ? 1 : 0
+
+  count = local.accounts_exist ? 1 : 0
+
+  common_tags             = local.common_tags
+  findings_export_enabled = local.log_archive_exists
+  findings_bucket_arn     = local.findings_bucket_arn
+  findings_kms_key_arn    = local.findings_kms_key_arn
 
   providers = {
     aws = aws.audit_ca_central_1
@@ -387,7 +483,13 @@ module "guardduty_audit_ca_central_1" {
 
 module "guardduty_audit_sa_east_1" {
   source = "./modules/guardduty-enabler"
-  count  = local.accounts_exist ? 1 : 0
+
+  count = local.accounts_exist ? 1 : 0
+
+  common_tags             = local.common_tags
+  findings_export_enabled = local.log_archive_exists
+  findings_bucket_arn     = local.findings_bucket_arn
+  findings_kms_key_arn    = local.findings_kms_key_arn
 
   providers = {
     aws = aws.audit_sa_east_1

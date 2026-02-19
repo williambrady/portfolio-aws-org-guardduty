@@ -10,7 +10,7 @@ Checks performed:
 2. Audit account is delegated administrator in all regions
 3. Organization auto-enable is configured in all regions
 4. Detectors exist and are enabled in all 3 accounts, all regions
-5. Data sources (S3, K8s, Malware) are enabled
+5. Publishing destinations configured and healthy in all regions
 
 Prerequisites:
 - Must be run from the management account
@@ -55,9 +55,7 @@ def load_tfvars() -> dict:
     tfvars_path = Path("/work/terraform/bootstrap.auto.tfvars.json")
     if not tfvars_path.exists():
         # Fallback for local development
-        tfvars_path = (
-            Path(__file__).parent.parent / "terraform" / "bootstrap.auto.tfvars.json"
-        )
+        tfvars_path = Path(__file__).parent.parent / "terraform" / "bootstrap.auto.tfvars.json"
 
     if not tfvars_path.exists():
         return {}
@@ -101,9 +99,7 @@ def check_service_access() -> dict:
 
     try:
         response = org_client.list_aws_service_access_for_organization()
-        enabled_services = [
-            s["ServicePrincipal"] for s in response.get("EnabledServicePrincipals", [])
-        ]
+        enabled_services = [s["ServicePrincipal"] for s in response.get("EnabledServicePrincipals", [])]
         result["enabled"] = "guardduty.amazonaws.com" in enabled_services
     except ClientError as e:
         result["error"] = str(e)
@@ -186,14 +182,8 @@ def check_org_config(region: str, audit_account_id: str = None) -> dict:
         result["auto_enable"] = response.get("AutoEnableOrganizationMembers", "NONE")
 
         datasources = response.get("DataSources", {})
-        result["s3_auto_enable"] = datasources.get("S3Logs", {}).get(
-            "AutoEnable", False
-        )
-        result["k8s_auto_enable"] = (
-            datasources.get("Kubernetes", {})
-            .get("AuditLogs", {})
-            .get("AutoEnable", False)
-        )
+        result["s3_auto_enable"] = datasources.get("S3Logs", {}).get("AutoEnable", False)
+        result["k8s_auto_enable"] = datasources.get("Kubernetes", {}).get("AuditLogs", {}).get("AutoEnable", False)
         result["malware_auto_enable"] = (
             datasources.get("MalwareProtection", {})
             .get("ScanEc2InstanceWithFindings", {})
@@ -246,10 +236,7 @@ def check_detector(session: boto3.Session, region: str, account_name: str) -> di
 
         datasources = detector.get("DataSources", {})
         result["s3_enabled"] = datasources.get("S3Logs", {}).get("Status") == "ENABLED"
-        result["k8s_enabled"] = (
-            datasources.get("Kubernetes", {}).get("AuditLogs", {}).get("Status")
-            == "ENABLED"
-        )
+        result["k8s_enabled"] = datasources.get("Kubernetes", {}).get("AuditLogs", {}).get("Status") == "ENABLED"
         result["malware_enabled"] = (
             datasources.get("MalwareProtection", {})
             .get("ScanEc2InstanceWithFindings", {})
@@ -257,6 +244,54 @@ def check_detector(session: boto3.Session, region: str, account_name: str) -> di
             .get("Status")
             == "ENABLED"
         )
+
+    except ClientError as e:
+        result["error"] = str(e)
+
+    return result
+
+
+def check_publishing_destination(session: boto3.Session, region: str) -> dict:
+    """Check publishing destination configuration for a detector.
+
+    Returns dict with:
+        - configured: True if an S3 publishing destination exists
+        - destination_arn: The S3 bucket ARN
+        - status: Publishing status (e.g., PUBLISHING, UNABLE_TO_PUBLISH)
+        - error: Error message if check failed
+    """
+    result = {
+        "configured": False,
+        "destination_arn": None,
+        "status": None,
+        "error": None,
+    }
+
+    if session is None:
+        gd_client = boto3.client("guardduty", region_name=region)
+    else:
+        gd_client = session.client("guardduty", region_name=region)
+
+    try:
+        detectors = gd_client.list_detectors()
+        if not detectors.get("DetectorIds"):
+            result["error"] = "No detector found"
+            return result
+
+        detector_id = detectors["DetectorIds"][0]
+        destinations = gd_client.list_publishing_destinations(DetectorId=detector_id)
+
+        for dest in destinations.get("Destinations", []):
+            if dest.get("DestinationType") == "S3":
+                result["configured"] = True
+                result["status"] = dest.get("Status", "UNKNOWN")
+
+                dest_detail = gd_client.describe_publishing_destination(
+                    DetectorId=detector_id,
+                    DestinationId=dest["DestinationId"],
+                )
+                result["destination_arn"] = dest_detail.get("DestinationProperties", {}).get("DestinationArn")
+                break
 
     except ClientError as e:
         result["error"] = str(e)
@@ -275,7 +310,7 @@ def main():
     print("Loading configuration...")
     tfvars = load_tfvars()
 
-    management_account_id = tfvars.get("master_account_id", "")
+    management_account_id = tfvars.get("management_account_id", "")
     audit_account_id = tfvars.get("audit_account_id", "")
     log_archive_account_id = tfvars.get("log_archive_account_id", "")
 
@@ -397,11 +432,7 @@ def main():
         det_errors = 0
 
         for region in ALL_REGIONS:
-            if assume_account_id:
-                session = assume_role(assume_account_id, region)
-            else:
-                session = None
-
+            session = assume_role(assume_account_id, region) if assume_account_id else None
             result = check_detector(session, region, account_name)
             if result.get("error"):
                 det_errors += 1
@@ -417,6 +448,41 @@ def main():
         if det_errors > 0:
             print(f"  Errors: {det_errors} regions")
         print("")
+
+    # Check 5: Publishing destinations (findings export to S3)
+    print("Checking findings publishing destinations (audit account)...")
+    pub_ok = 0
+    pub_unhealthy = 0
+    pub_missing = 0
+    pub_errors = 0
+    pub_bucket = None
+
+    for region in ALL_REGIONS:
+        session = assume_role(audit_account_id, region)
+        result = check_publishing_destination(session, region)
+        if result.get("error"):
+            pub_errors += 1
+        elif not result["configured"]:
+            pub_missing += 1
+            issues.append(f"Audit ({region}): No S3 publishing destination")
+        elif result["status"] != "PUBLISHING":
+            pub_unhealthy += 1
+            issues.append(f"Audit ({region}): Publishing status is {result['status']}")
+        else:
+            pub_ok += 1
+            if pub_bucket is None and result["destination_arn"]:
+                pub_bucket = result["destination_arn"]
+
+    print(f"  Publishing: {pub_ok}/{len(ALL_REGIONS)} regions")
+    if pub_unhealthy > 0:
+        print(f"  Unhealthy: {pub_unhealthy} regions")
+    if pub_missing > 0:
+        print(f"  Missing: {pub_missing} regions")
+    if pub_errors > 0:
+        print(f"  Errors: {pub_errors} regions")
+    if pub_bucket:
+        print(f"  Destination: {pub_bucket}")
+    print("")
 
     # Summary
     print("=" * 60)

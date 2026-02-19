@@ -10,26 +10,37 @@ variable "resource_prefix" {
   type        = string
 }
 
+variable "deployment_name" {
+  description = "Deployment name used for CloudWatch log group naming"
+  type        = string
+}
+
+variable "management_account_id" {
+  description = "AWS account ID of the management account (auto-discovered from caller identity)"
+  type        = string
+  default     = ""
+}
+
 variable "audit_account_id" {
   description = "AWS account ID of the audit account (delegated administrator for GuardDuty)"
   type        = string
   default     = ""
 }
 
-variable "management_account_id" {
-  description = "AWS account ID of the management account (auto-detected if empty)"
+variable "log_archive_account_id" {
+  description = "AWS account ID of the log archive account (auto-discovered from org-baseline SSM parameter)"
   type        = string
   default     = ""
 }
 
-variable "guardduty_org_exists" {
-  description = "Whether GuardDuty organization configuration already exists"
+variable "access_logs_bucket_exists" {
+  description = "Whether the access logs bucket exists in the log-archive account (auto-discovered)"
   type        = bool
   default     = false
 }
 
-variable "guardduty_delegated_admin" {
-  description = "Existing GuardDuty delegated admin account ID (empty if none)"
-  type        = string
-  default     = ""
+variable "custom_tags" {
+  description = "Custom tags applied to all resources (auto-discovered from org-baseline SSM parameter)"
+  type        = map(string)
+  default     = {}
 }

@@ -69,9 +69,7 @@ def import_resource(address: str, resource_id: str) -> bool:
     success, output = run_terraform_cmd(["import", address, resource_id])
     if success:
         return True
-    if "Resource already managed" in output:
-        return True
-    return False
+    return "Resource already managed" in output
 
 
 def get_account_ids_from_tfvars() -> dict:
@@ -115,6 +113,47 @@ def region_to_module_suffix(region: str) -> str:
     return region.replace("-", "_")
 
 
+def sync_cloudwatch_log_group(state_resources: set):
+    """Sync CloudWatch log group into Terraform state.
+
+    The log group is pre-created by entrypoint.sh (via aws logs create-log-group)
+    before Terraform runs to allow immediate logging. Terraform is the source of
+    truth for retention, KMS encryption, and tags.
+    """
+    print("\n=== Syncing CloudWatch Log Group ===\n")
+
+    tf_address = "aws_cloudwatch_log_group.deployments"
+
+    if resource_exists_in_state(tf_address, state_resources):
+        print("  Already in state, skipping")
+        return
+
+    tfvars_path = Path("/work/terraform/bootstrap.auto.tfvars.json")
+    if not tfvars_path.exists():
+        print("  No tfvars found, skipping")
+        return
+
+    with open(tfvars_path) as f:
+        tfvars = json.load(f)
+
+    resource_prefix = tfvars.get("resource_prefix", "")
+    deployment_name = tfvars.get("deployment_name", "")
+    if not resource_prefix or not deployment_name:
+        print("  Missing resource_prefix or deployment_name, skipping")
+        return
+
+    log_group_name = f"/{resource_prefix}/deployments/{deployment_name}"
+
+    print(f"  Importing {tf_address} ({log_group_name})...")
+    success, output = run_terraform_cmd(["import", tf_address, log_group_name])
+    if success:
+        print("    Imported successfully")
+    elif "Resource already managed" in output:
+        print("    Already in state")
+    else:
+        print(f"    Import failed: {output[:200]}")
+
+
 def sync_guardduty_org_admin(config: dict, state_resources: set):
     """Sync GuardDuty delegated administrator into Terraform state."""
     print("\n=== Syncing GuardDuty Delegated Admin ===\n")
@@ -143,15 +182,11 @@ def sync_guardduty_org_admin(config: dict, state_resources: set):
         try:
             response = gd_client.list_organization_admin_accounts()
             admin_accounts = response.get("AdminAccounts", [])
-            is_delegated_admin = any(
-                a["AdminAccountId"] == audit_account_id for a in admin_accounts
-            )
+            is_delegated_admin = any(a["AdminAccountId"] == audit_account_id for a in admin_accounts)
 
             if is_delegated_admin:
                 print(f"  Importing {admin_tf_address}...")
-                success, output = run_terraform_cmd(
-                    ["import", admin_tf_address, audit_account_id]
-                )
+                success, output = run_terraform_cmd(["import", admin_tf_address, audit_account_id])
                 if success:
                     print("    Imported successfully")
                     imported_count += 1
@@ -162,62 +197,10 @@ def sync_guardduty_org_admin(config: dict, state_resources: set):
         except ClientError:
             pass
 
-    print(
-        f"\n  GuardDuty Delegated Admin: {imported_count} imported, {skipped_count} already in state"
-    )
+    print(f"\n  GuardDuty Delegated Admin: {imported_count} imported, {skipped_count} already in state")
 
 
-def sync_guardduty_org_config(config: dict, state_resources: set):
-    """Sync GuardDuty organization configuration into Terraform state."""
-    print("\n=== Syncing GuardDuty Org Config ===\n")
-
-    imported_count = 0
-    skipped_count = 0
-
-    for region in ALL_REGIONS:
-        region_suffix = region_to_module_suffix(region)
-
-        org_config_tf_address = f"module.guardduty_org_config_{region_suffix}[0].aws_guardduty_organization_configuration.main"
-
-        if resource_exists_in_state(org_config_tf_address, state_resources):
-            skipped_count += 1
-            continue
-
-        gd_client = boto3.client("guardduty", region_name=region)
-
-        try:
-            detector_response = gd_client.list_detectors()
-            detector_ids = detector_response.get("DetectorIds", [])
-            if detector_ids:
-                detector_id = detector_ids[0]
-                try:
-                    gd_client.describe_organization_configuration(
-                        DetectorId=detector_id
-                    )
-                    print(f"  Importing {org_config_tf_address}...")
-                    success, output = run_terraform_cmd(
-                        ["import", org_config_tf_address, detector_id]
-                    )
-                    if success:
-                        print("    Imported successfully")
-                        imported_count += 1
-                    elif "Resource already managed" in output:
-                        skipped_count += 1
-                    else:
-                        print(f"    Import failed: {output[:200]}")
-                except ClientError:
-                    pass
-        except ClientError:
-            pass
-
-    print(
-        f"\n  GuardDuty Org Config: {imported_count} imported, {skipped_count} already in state"
-    )
-
-
-def sync_guardduty_detectors(
-    config: dict, management_account_id: str, state_resources: set
-):
+def sync_guardduty_detectors(config: dict, management_account_id: str, state_resources: set):
     """Sync GuardDuty detectors into Terraform state.
 
     Only syncs audit account detectors - management and log_archive accounts
@@ -257,9 +240,7 @@ def sync_guardduty_detectors(
             if detector_ids:
                 detector_id = detector_ids[0]
                 print(f"  Importing {tf_address}...")
-                success, output = run_terraform_cmd(
-                    ["import", tf_address, detector_id]
-                )
+                success, output = run_terraform_cmd(["import", tf_address, detector_id])
                 if success:
                     print("    Imported successfully")
                     imported_count += 1
@@ -271,9 +252,68 @@ def sync_guardduty_detectors(
         except ClientError:
             pass
 
-    print(
-        f"\n  GuardDuty Detectors: {imported_count} imported, {skipped_count} already in state"
-    )
+    print(f"\n  GuardDuty Detectors: {imported_count} imported, {skipped_count} already in state")
+
+
+def sync_guardduty_publishing_destinations(state_resources: set):
+    """Sync GuardDuty publishing destinations into Terraform state.
+
+    Publishing destinations export findings to S3. These are configured on the
+    audit account's detectors (one per region).
+    """
+    print("\n=== Syncing GuardDuty Publishing Destinations ===\n")
+
+    account_ids = get_account_ids_from_tfvars()
+
+    if not account_ids["audit"]:
+        print("  No audit account ID found, skipping")
+        return
+
+    imported_count = 0
+    skipped_count = 0
+
+    for region in ALL_REGIONS:
+        region_suffix = region_to_module_suffix(region)
+        tf_address = f"module.guardduty_audit_{region_suffix}[0].aws_guardduty_publishing_destination.findings[0]"
+
+        if resource_exists_in_state(tf_address, state_resources):
+            skipped_count += 1
+            continue
+
+        session = get_cross_account_session(account_ids["audit"], region)
+        if not session:
+            continue
+        gd_client = session.client("guardduty")
+
+        try:
+            detectors = gd_client.list_detectors()
+            detector_ids = detectors.get("DetectorIds", [])
+
+            if not detector_ids:
+                continue
+
+            detector_id = detector_ids[0]
+            destinations = gd_client.list_publishing_destinations(DetectorId=detector_id)
+
+            for dest in destinations.get("Destinations", []):
+                if dest.get("DestinationType") == "S3":
+                    dest_id = dest["DestinationId"]
+                    import_id = f"{detector_id}:{dest_id}"
+                    print(f"  Importing {tf_address}...")
+                    success, output = run_terraform_cmd(["import", tf_address, import_id])
+                    if success:
+                        print("    Imported successfully")
+                        imported_count += 1
+                    elif "Resource already managed" in output:
+                        print("    Already in state")
+                        skipped_count += 1
+                    else:
+                        print(f"    Import failed: {output[:200]}")
+                    break
+        except ClientError:
+            pass
+
+    print(f"\n  GuardDuty Publishing Destinations: {imported_count} imported, {skipped_count} already in state")
 
 
 def main():
@@ -299,14 +339,22 @@ def main():
     state_resources = get_state_resources()
     print(f"  Current state has {len(state_resources)} resources")
 
+    # Sync CloudWatch log group (pre-created by entrypoint.sh before Terraform)
+    sync_cloudwatch_log_group(state_resources)
+
     # Sync GuardDuty delegated admin (management account)
     sync_guardduty_org_admin(config, state_resources)
 
-    # Sync GuardDuty org config (audit account)
-    sync_guardduty_org_config(config, state_resources)
+    # Note: GuardDuty org config is NOT imported because the existing AWS state
+    # has auto_enable = NONE. Importing it would force a destroy+recreate cycle
+    # to change it to ALL. Letting Terraform create it fresh applies the correct
+    # configuration directly.
 
     # Sync GuardDuty detectors
     sync_guardduty_detectors(config, account_id, state_resources)
+
+    # Sync GuardDuty publishing destinations (findings export to S3)
+    sync_guardduty_publishing_destinations(state_resources)
 
     print("\n" + "=" * 50)
     print("  State Sync Complete")

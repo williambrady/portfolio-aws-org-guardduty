@@ -1,5 +1,5 @@
 # Provider Configurations
-# Management account providers (17) + Audit account providers (17) = 34 total
+# Management account providers (17) + Audit account providers (17) + Log Archive account providers (17) = 51 total
 
 # -----------------------------------------------------------------------------
 # Management Account Providers
@@ -293,6 +293,214 @@ provider "aws" {
     for_each = var.audit_account_id != "" ? [1] : []
     content {
       role_arn = "arn:aws:iam::${var.audit_account_id}:role/OrganizationAccountAccessRole"
+    }
+  }
+}
+
+# -----------------------------------------------------------------------------
+# Log Archive Account Providers
+# -----------------------------------------------------------------------------
+
+provider "aws" {
+  alias  = "log_archive"
+  region = var.primary_region
+
+  dynamic "assume_role" {
+    for_each = var.log_archive_account_id != "" ? [1] : []
+    content {
+      role_arn = "arn:aws:iam::${var.log_archive_account_id}:role/OrganizationAccountAccessRole"
+    }
+  }
+}
+
+provider "aws" {
+  alias  = "log_archive_us_east_2"
+  region = "us-east-2"
+
+  dynamic "assume_role" {
+    for_each = var.log_archive_account_id != "" ? [1] : []
+    content {
+      role_arn = "arn:aws:iam::${var.log_archive_account_id}:role/OrganizationAccountAccessRole"
+    }
+  }
+}
+
+provider "aws" {
+  alias  = "log_archive_us_west_1"
+  region = "us-west-1"
+
+  dynamic "assume_role" {
+    for_each = var.log_archive_account_id != "" ? [1] : []
+    content {
+      role_arn = "arn:aws:iam::${var.log_archive_account_id}:role/OrganizationAccountAccessRole"
+    }
+  }
+}
+
+provider "aws" {
+  alias  = "log_archive_us_west_2"
+  region = "us-west-2"
+
+  dynamic "assume_role" {
+    for_each = var.log_archive_account_id != "" ? [1] : []
+    content {
+      role_arn = "arn:aws:iam::${var.log_archive_account_id}:role/OrganizationAccountAccessRole"
+    }
+  }
+}
+
+provider "aws" {
+  alias  = "log_archive_eu_west_1"
+  region = "eu-west-1"
+
+  dynamic "assume_role" {
+    for_each = var.log_archive_account_id != "" ? [1] : []
+    content {
+      role_arn = "arn:aws:iam::${var.log_archive_account_id}:role/OrganizationAccountAccessRole"
+    }
+  }
+}
+
+provider "aws" {
+  alias  = "log_archive_eu_west_2"
+  region = "eu-west-2"
+
+  dynamic "assume_role" {
+    for_each = var.log_archive_account_id != "" ? [1] : []
+    content {
+      role_arn = "arn:aws:iam::${var.log_archive_account_id}:role/OrganizationAccountAccessRole"
+    }
+  }
+}
+
+provider "aws" {
+  alias  = "log_archive_eu_west_3"
+  region = "eu-west-3"
+
+  dynamic "assume_role" {
+    for_each = var.log_archive_account_id != "" ? [1] : []
+    content {
+      role_arn = "arn:aws:iam::${var.log_archive_account_id}:role/OrganizationAccountAccessRole"
+    }
+  }
+}
+
+provider "aws" {
+  alias  = "log_archive_eu_central_1"
+  region = "eu-central-1"
+
+  dynamic "assume_role" {
+    for_each = var.log_archive_account_id != "" ? [1] : []
+    content {
+      role_arn = "arn:aws:iam::${var.log_archive_account_id}:role/OrganizationAccountAccessRole"
+    }
+  }
+}
+
+provider "aws" {
+  alias  = "log_archive_eu_north_1"
+  region = "eu-north-1"
+
+  dynamic "assume_role" {
+    for_each = var.log_archive_account_id != "" ? [1] : []
+    content {
+      role_arn = "arn:aws:iam::${var.log_archive_account_id}:role/OrganizationAccountAccessRole"
+    }
+  }
+}
+
+provider "aws" {
+  alias  = "log_archive_ap_southeast_1"
+  region = "ap-southeast-1"
+
+  dynamic "assume_role" {
+    for_each = var.log_archive_account_id != "" ? [1] : []
+    content {
+      role_arn = "arn:aws:iam::${var.log_archive_account_id}:role/OrganizationAccountAccessRole"
+    }
+  }
+}
+
+provider "aws" {
+  alias  = "log_archive_ap_southeast_2"
+  region = "ap-southeast-2"
+
+  dynamic "assume_role" {
+    for_each = var.log_archive_account_id != "" ? [1] : []
+    content {
+      role_arn = "arn:aws:iam::${var.log_archive_account_id}:role/OrganizationAccountAccessRole"
+    }
+  }
+}
+
+provider "aws" {
+  alias  = "log_archive_ap_northeast_1"
+  region = "ap-northeast-1"
+
+  dynamic "assume_role" {
+    for_each = var.log_archive_account_id != "" ? [1] : []
+    content {
+      role_arn = "arn:aws:iam::${var.log_archive_account_id}:role/OrganizationAccountAccessRole"
+    }
+  }
+}
+
+provider "aws" {
+  alias  = "log_archive_ap_northeast_2"
+  region = "ap-northeast-2"
+
+  dynamic "assume_role" {
+    for_each = var.log_archive_account_id != "" ? [1] : []
+    content {
+      role_arn = "arn:aws:iam::${var.log_archive_account_id}:role/OrganizationAccountAccessRole"
+    }
+  }
+}
+
+provider "aws" {
+  alias  = "log_archive_ap_northeast_3"
+  region = "ap-northeast-3"
+
+  dynamic "assume_role" {
+    for_each = var.log_archive_account_id != "" ? [1] : []
+    content {
+      role_arn = "arn:aws:iam::${var.log_archive_account_id}:role/OrganizationAccountAccessRole"
+    }
+  }
+}
+
+provider "aws" {
+  alias  = "log_archive_ap_south_1"
+  region = "ap-south-1"
+
+  dynamic "assume_role" {
+    for_each = var.log_archive_account_id != "" ? [1] : []
+    content {
+      role_arn = "arn:aws:iam::${var.log_archive_account_id}:role/OrganizationAccountAccessRole"
+    }
+  }
+}
+
+provider "aws" {
+  alias  = "log_archive_ca_central_1"
+  region = "ca-central-1"
+
+  dynamic "assume_role" {
+    for_each = var.log_archive_account_id != "" ? [1] : []
+    content {
+      role_arn = "arn:aws:iam::${var.log_archive_account_id}:role/OrganizationAccountAccessRole"
+    }
+  }
+}
+
+provider "aws" {
+  alias  = "log_archive_sa_east_1"
+  region = "sa-east-1"
+
+  dynamic "assume_role" {
+    for_each = var.log_archive_account_id != "" ? [1] : []
+    content {
+      role_arn = "arn:aws:iam::${var.log_archive_account_id}:role/OrganizationAccountAccessRole"
     }
   }
 }
