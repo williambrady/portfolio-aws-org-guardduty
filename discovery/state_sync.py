@@ -246,8 +246,9 @@ def sync_guardduty_org_admin(config: dict, state_resources: set):
 def sync_guardduty_detectors(config: dict, management_account_id: str, state_resources: set):
     """Sync GuardDuty detectors into Terraform state.
 
-    Only syncs audit account detectors - management and log_archive accounts
-    are auto-enrolled by the organization configuration.
+    Syncs both management and audit account detectors. Management account
+    detectors use current credentials (no assume role). Audit account
+    detectors use cross-account role assumption.
     """
     print("\n=== Syncing GuardDuty Detectors ===\n")
 
@@ -261,39 +262,47 @@ def sync_guardduty_detectors(config: dict, management_account_id: str, state_res
     skipped_count = 0
     failed_count = 0
 
-    account_prefix = "audit"
-    assume_account_id = account_ids["audit"]
+    # Sync both management and audit account detectors
+    accounts_to_sync = [
+        ("mgmt", None),
+        ("audit", account_ids["audit"]),
+    ]
 
-    for region in ALL_REGIONS:
-        region_suffix = region_to_module_suffix(region)
-        tf_address = f"module.guardduty_{account_prefix}_{region_suffix}[0].aws_guardduty_detector.main"
+    for account_prefix, assume_account_id in accounts_to_sync:
+        for region in ALL_REGIONS:
+            region_suffix = region_to_module_suffix(region)
+            tf_address = f"module.guardduty_{account_prefix}_{region_suffix}[0].aws_guardduty_detector.main"
 
-        if resource_exists_in_state(tf_address, state_resources):
-            skipped_count += 1
-            continue
+            if resource_exists_in_state(tf_address, state_resources):
+                skipped_count += 1
+                continue
 
-        session = get_cross_account_session(assume_account_id, region)
-        if not session:
-            failed_count += 1
-            continue
-        gd_client = session.client("guardduty")
-
-        try:
-            response = gd_client.list_detectors()
-            detector_ids = response.get("DetectorIds", [])
-
-            if detector_ids:
-                detector_id = detector_ids[0]
-                print(f"  Importing {tf_address}...")
-                if import_resource(tf_address, detector_id):
-                    print("    Imported successfully")
-                    imported_count += 1
-                else:
-                    print(f"    Import failed for {region}")
+            # Management account uses current credentials, audit uses cross-account
+            if assume_account_id:
+                session = get_cross_account_session(assume_account_id, region)
+                if not session:
                     failed_count += 1
-        except ClientError as e:
-            print(f"    Error checking {region}: {e}")
-            failed_count += 1
+                    continue
+                gd_client = session.client("guardduty")
+            else:
+                gd_client = boto3.client("guardduty", region_name=region)
+
+            try:
+                response = gd_client.list_detectors()
+                detector_ids = response.get("DetectorIds", [])
+
+                if detector_ids:
+                    detector_id = detector_ids[0]
+                    print(f"  Importing {tf_address}...")
+                    if import_resource(tf_address, detector_id):
+                        print("    Imported successfully")
+                        imported_count += 1
+                    else:
+                        print(f"    Import failed for {account_prefix}/{region}")
+                        failed_count += 1
+            except ClientError as e:
+                print(f"    Error checking {account_prefix}/{region}: {e}")
+                failed_count += 1
 
     summary = f"\n  GuardDuty Detectors: {imported_count} imported, {skipped_count} already in state"
     if failed_count:

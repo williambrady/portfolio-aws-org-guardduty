@@ -143,7 +143,13 @@ Imports existing AWS resources into Terraform state to avoid conflicts on first 
 
 #### 2.3.3 Sync GuardDuty Detectors
 
-- For each of 17 regions (audit account only):
+- For management account (17 regions):
+  - Address: `module.guardduty_mgmt_{region}[0].aws_guardduty_detector.main`
+  - Uses current credentials (management account)
+  - Calls `guardduty.list_detectors()`
+  - Import ID: `{detector_id}`
+  - **Skipped if:** Already in state or no detector exists
+- For audit account (17 regions):
   - Address: `module.guardduty_audit_{region}[0].aws_guardduty_detector.main`
   - Assumes role into audit account
   - Calls `guardduty.list_detectors()`
@@ -174,6 +180,16 @@ Terraform creates/updates resources across three account contexts using 51 provi
 - `module.guardduty_org_{region}` - Registers audit account as delegated admin
 - Resource: `aws_guardduty_organization_admin_account`
 - One per region, runs from management account context
+
+**GuardDuty Detectors (17 regions):**
+- `module.guardduty_mgmt_{region}` - Enables GuardDuty detector in management account
+- The management account is NOT auto-enrolled by organization configuration (it is the org owner, not a member)
+- Resources per region:
+  - `aws_guardduty_detector` with S3 logs, K8s audit logs, malware protection
+  - `aws_guardduty_detector_feature` for LAMBDA_NETWORK_LOGS
+  - `aws_guardduty_detector_feature` for RDS_LOGIN_EVENTS
+- No publishing destination (findings export is only on the delegated admin's detectors)
+- `depends_on` the corresponding `guardduty_org` module
 
 ### 3.2 Audit Account Resources
 
