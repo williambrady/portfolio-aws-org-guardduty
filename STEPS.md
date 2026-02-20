@@ -95,7 +95,7 @@ Resolved values:
 ### 1.8 Write bootstrap.auto.tfvars.json
 
 - Writes to `/work/terraform/bootstrap.auto.tfvars.json`
-- Contains: `primary_region`, `resource_prefix`, `deployment_name`, `management_account_id`, `audit_account_id`, `log_archive_account_id`, `access_logs_bucket_exists`, `custom_tags`
+- Contains: `primary_region`, `resource_prefix`, `deployment_name`, `management_account_id`, `audit_account_id`, `log_archive_account_id`, `log_archive_account_email`, `access_logs_bucket_exists`, `custom_tags`
 - Terraform reads this file automatically during plan/apply
 
 ## Phase 2: Terraform Init + State Sync
