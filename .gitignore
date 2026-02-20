@@ -99,5 +99,8 @@ logs/
 *.zip
 *.tar.gz
 
+# Claude Code
+.claude/
+
 # Ruff
 .ruff_cache/

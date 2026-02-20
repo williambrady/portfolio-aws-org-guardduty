@@ -1,10 +1,13 @@
 .git/
+.claude/
+.ruff_cache/
 **/.terraform/
 **/.terraform.lock.hcl
 .tflint.hcl
 .terraform-docs.yml
 .pre-commit-config.yaml
 .gitignore
+.dockerignore
 __pycache__/
 *.pyc
 *.tfstate
@@ -12,6 +15,8 @@ __pycache__/
 *.tfvars.json
 bootstrap.auto.tfvars.json
 discovery.json
+cloudformation/
+scripts/
 CLAUDE.md
 README.md
 LICENSE
