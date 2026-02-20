@@ -168,10 +168,11 @@ resource "aws_guardduty_member" "members" {
 
   depends_on = [aws_guardduty_organization_configuration.main]
 
-  # Email is only used during creation (invitation workflow) and is not read
-  # back by the API on refresh. Ignoring prevents force-replacement cycles.
-  # Also, members cannot be deleted when auto_enable = ALL is set.
+  # Email and invite are only used during creation (invitation workflow).
+  # Email is not read back by the API on refresh, causing force-replacement.
+  # Invite drifts from true to null after creation, triggering disassociation.
+  # Members cannot be disassociated/deleted when auto_enable = ALL is set.
   lifecycle {
-    ignore_changes = [email]
+    ignore_changes = [email, invite]
   }
 }
