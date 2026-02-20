@@ -11,7 +11,7 @@ This project was extracted from [portfolio-aws-org-baseline](../portfolio-aws-or
 ## Features
 
 - **Delegated Admin** - Configures audit account as GuardDuty delegated administrator in all regions
-- **Detector Enablement** - Enables GuardDuty detector in the audit account across all regions
+- **Detector Enablement** - Enables GuardDuty detectors in management and audit accounts across all regions
 - **Organization Auto-Enable** - Configures `auto_enable_organization_members = ALL` for all regions
 - **Findings Export** - Centralized S3 bucket in log-archive account with KMS encryption, lifecycle policies, and per-region publishing destinations
 - **Protection Plans** (auto-enabled for all member accounts):
@@ -144,8 +144,8 @@ portfolio-aws-org-guardduty/
 | Module | Account | Purpose |
 |--------|---------|---------|
 | `guardduty-org` | Management | Designate delegated admin (per-region) |
-| `guardduty-enabler` | Delegated Admin | Enable GuardDuty detector + findings export |
-| `guardduty-org-config` | Delegated Admin | Configure auto-enable and protection plans |
+| `guardduty-enabler` | Management + Delegated Admin | Enable GuardDuty detector (+ findings export on audit) |
+| `guardduty-org-config` | Delegated Admin | Configure auto-enable, protection plans, member enrollment |
 | `kms` | Log-Archive | KMS key for findings bucket encryption |
 | `s3` | Log-Archive | Centralized findings export bucket |
 
@@ -164,20 +164,23 @@ See [STEPS.md](STEPS.md) for detailed documentation of every deployment step.
 ```
 Management Account
 ├── Registers delegated admin (17 regions)
+├── GuardDuty detectors (17 regions, direct - org owner cannot be auto-enrolled)
 ├── Deployment CloudWatch Logs
 └── Runs Terraform
 
 Audit Account (Delegated Admin)
 ├── GuardDuty detectors (17 regions)
 ├── Organization auto-enable configuration
+├── Member enrollment (log-archive account)
 ├── Publishing destinations → S3 findings bucket
 └── All protection plans enabled
 
 Log-Archive Account
+├── GuardDuty detector (auto-enrolled as member by delegated admin)
 ├── KMS key for findings encryption
 └── S3 bucket for centralized findings export
 
-Member Accounts
+Other Member Accounts
 └── Auto-enrolled by organization configuration
 ```
 

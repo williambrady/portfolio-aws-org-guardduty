@@ -116,9 +116,16 @@ Resolved values:
 
 ### 2.3 State Sync (state_sync.py)
 
-Imports existing AWS resources into Terraform state to avoid conflicts on first apply or after manual changes.
+Imports existing AWS resources into Terraform state to avoid conflicts on first apply or after manual changes. Also cleans up stale resources from previous architectural changes.
 
-#### 2.3.0 Provider Warm-Up (empty state only)
+#### 2.3.0a Cleanup Removed Resources
+
+- Scans state for management account `aws_guardduty_member.members` entries
+- The management account (org owner) cannot be enrolled as a GuardDuty member, so these entries are stale
+- Runs `terraform state rm` for each matching address
+- **Skipped if:** No management account member enrollments found in state
+
+#### 2.3.0b Provider Warm-Up (empty state only)
 
 - **Triggered when:** Terraform state has 0 resources (first deployment or after state reset)
 - Runs `terraform plan -refresh-only -input=false -compact-warnings` (timeout: 300s)
@@ -202,8 +209,8 @@ Terraform creates/updates resources across three account contexts using 51 provi
   - `aws_guardduty_publishing_destination` for S3 findings export (conditional on `log_archive_account_id != ""`)
 - `depends_on` the corresponding `guardduty_org` module
 
-**Organization Configuration (17 regions):**
-- `module.guardduty_org_config_{region}` - Configures auto-enable and protection plans
+**Organization Configuration + Member Enrollment (17 regions):**
+- `module.guardduty_org_config_{region}` - Configures auto-enable, protection plans, and member enrollment
 - Resources per region:
   - `aws_guardduty_organization_configuration` with `auto_enable_organization_members = ALL`
   - `aws_guardduty_organization_configuration_feature` for S3_DATA_EVENTS (auto_enable = ALL)
@@ -212,6 +219,9 @@ Terraform creates/updates resources across three account contexts using 51 provi
   - `aws_guardduty_organization_configuration_feature` for RUNTIME_MONITORING (auto_enable = ALL, with EKS/ECS/EC2 agent management)
   - `aws_guardduty_organization_configuration_feature` for LAMBDA_NETWORK_LOGS (auto_enable = ALL)
   - `aws_guardduty_organization_configuration_feature` for RDS_LOGIN_EVENTS (auto_enable = ALL)
+  - `aws_guardduty_member` for log-archive account (explicit enrollment ensures detector with all protection plans)
+- The management account is NOT enrolled as a member (org owner cannot be a member; gets direct detectors in section 3.1)
+- `lifecycle { ignore_changes = [email, invite] }` on `aws_guardduty_member` prevents perpetual replacement cycles (email not read back by API, invite drifts from true to null)
 - `depends_on` the corresponding audit detector module
 
 ### 3.3 Log-Archive Account Resources

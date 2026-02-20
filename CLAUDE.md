@@ -34,11 +34,14 @@ Discovery reads `/{resource_prefix}/org-baseline/config` from SSM Parameter Stor
 - **Audit Account** - Delegated admin for GuardDuty, hosts detectors and org configuration
 - **Log-Archive Account** - Hosts centralized findings export S3 bucket and KMS key (conditional on `log_archive_account_id`)
 
-### Three-Phase GuardDuty Architecture
+### GuardDuty Architecture
 
 1. **Delegated Admin Registration** (Management Account) - 17 `guardduty-org` modules
-2. **Detector Enablement** (Audit Account) - 17 `guardduty-enabler` modules
-3. **Organization Configuration** (Audit Account) - 17 `guardduty-org-config` modules with 180s propagation wait
+2. **Management Account Detectors** (Management Account) - 17 `guardduty-enabler` modules (org owner cannot be auto-enrolled)
+3. **Audit Account Detectors** (Audit Account) - 17 `guardduty-enabler` modules with findings export
+4. **Organization Configuration + Member Enrollment** (Audit Account) - 17 `guardduty-org-config` modules
+   - Configures auto-enable for all protection plans
+   - Enrolls log-archive as a GuardDuty member via `aws_guardduty_member`
 
 ## Directory Structure
 
@@ -115,14 +118,16 @@ Edit `config.yaml` to customize:
 **GuardDuty Org Module** - Designates delegated admin (management account context):
 - `aws_guardduty_organization_admin_account` per region
 
-**GuardDuty Enabler Module** - Enables detector (audit account context):
+**GuardDuty Enabler Module** - Enables detector (management and audit account contexts):
+- Used for both management account (direct detectors) and audit account (delegated admin)
 - `aws_guardduty_detector` with S3, K8s, malware protection
 - `aws_guardduty_detector_feature` for Lambda and RDS protection
-- `aws_guardduty_publishing_destination` for S3 findings export (conditional)
+- `aws_guardduty_publishing_destination` for S3 findings export (audit account only, conditional)
 
 **GuardDuty Org Config Module** - Organization-wide settings (audit account context):
 - `aws_guardduty_organization_configuration` with auto_enable = ALL
 - Organization features: S3, EKS, malware, runtime monitoring, Lambda, RDS
+- `aws_guardduty_member` enrolls log-archive account (management account excluded - org owner cannot be a member)
 
 ## Post-Deployment
 
