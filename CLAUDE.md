@@ -4,51 +4,144 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-[Brief description of what this project does]
+AWS GuardDuty organization-wide deployment using Terraform wrapped in Docker. Deploys GuardDuty across all 17 AWS regions with delegated admin, detectors, and organization-wide auto-enable configuration.
 
-## Common Commands
+**Stack:** Terraform (infrastructure), Python (discovery/verification), Bash (orchestration), Docker (distribution)
 
-### Pre-commit Hooks
-```bash
-# Install hooks (first time setup)
-pip install pre-commit
-pre-commit install
-
-# Run all checks manually
-pre-commit run --all-files
-```
-
-### Terraform
-```bash
-cd terraform
-terraform init      # Initialize
-terraform fmt       # Format
-terraform validate  # Validate
-terraform plan      # Preview changes
-terraform apply     # Apply changes
-```
-
-### Using the Makefile
-```bash
-make help       # Show available targets
-make init       # Initialize Terraform
-make plan       # Run Terraform plan
-make apply      # Apply changes
-make fmt        # Format code
-make lint       # Run linters
-make test       # Run tests
-```
+**Relationship:** This project was extracted from `portfolio-aws-org-baseline` to allow independent deployment. The AWS Organization and GuardDuty service access principals remain managed by `portfolio-aws-org-baseline`.
 
 ## Architecture
 
-[Describe the architecture of your project]
+### Core Principles
 
-### Key Components
+1. **Terraform as State Owner** - Single source of truth for GuardDuty infrastructure state
+2. **Config-Driven** - `config.yaml` in project root defines deployment specification
+3. **Discovery-Driven** - Python discovers existing resources before Terraform runs
+4. **Idempotent Operations** - All deployments safe to retry
+5. **Modular Design** - Reusable Terraform modules for each GuardDuty component
 
-- `terraform/` - Infrastructure as Code definitions
-- `cloudformation/` - CloudFormation templates (if applicable)
-- `scripts/` - Utility scripts
+### Data Flow
 
-## Important Notes
+```
+config.yaml + SSM Parameter → discover.py → bootstrap.auto.tfvars.json → state_sync.py → Terraform → AWS
+```
 
-[Add any project-specific notes, conventions, or warnings]
+Discovery reads `/{resource_prefix}/org-baseline/config` from SSM Parameter Store (written by `portfolio-aws-org-baseline`) to auto-discover `audit_account_id`, `primary_region`, `tags`, etc. Falls back to `config.yaml` values if SSM is unavailable.
+
+### Account Types
+
+- **Management Account** - AWS Organization root, runs Terraform, registers delegated admin
+- **Audit Account** - Delegated admin for GuardDuty, hosts detectors and org configuration
+- **Log-Archive Account** - Hosts centralized findings export S3 bucket and KMS key (conditional on `log_archive_account_id`)
+
+### GuardDuty Architecture
+
+1. **Delegated Admin Registration** (Management Account) - 17 `guardduty-org` modules
+2. **Management Account Detectors** (Management Account) - 17 `guardduty-enabler` modules (org owner cannot be auto-enrolled)
+3. **Audit Account Detectors** (Audit Account) - 17 `guardduty-enabler` modules with findings export
+4. **Organization Configuration + Member Enrollment** (Audit Account) - 17 `guardduty-org-config` modules
+   - Configures auto-enable for all protection plans
+   - Enrolls log-archive as a GuardDuty member via `aws_guardduty_member`
+
+## Directory Structure
+
+```
+portfolio-aws-org-guardduty/
+├── entrypoint.sh           # Main orchestration script
+├── config.yaml             # Deployment configuration
+├── requirements.txt        # Python dependencies
+├── discovery/
+│   ├── discover.py         # AWS discovery, generates tfvars
+│   ├── state_sync.py       # Terraform state synchronization
+│   └── cloudwatch_logger.py # CloudWatch Logs streaming helper
+├── post-deployment/
+│   └── verify-guardduty.py # GuardDuty verification (5 checks)
+├── terraform/
+│   ├── main.tf             # Root module (KMS, S3, CloudWatch)
+│   ├── variables.tf        # Variable definitions
+│   ├── outputs.tf          # Output definitions
+│   ├── providers.tf        # Provider configurations (51 providers)
+│   ├── versions.tf         # Terraform/provider version constraints
+│   ├── guardduty-regional.tf  # Multi-region deployment
+│   └── modules/
+│       ├── guardduty-org/        # Per-region delegated admin registration
+│       ├── guardduty-enabler/    # Single-region detector + findings export
+│       ├── guardduty-org-config/ # Per-region organization configuration
+│       ├── kms/                  # Reusable KMS key module
+│       └── s3/                   # Reusable S3 bucket module
+├── Dockerfile
+└── Makefile
+```
+
+## Commands
+
+All code runs inside Docker containers. Use the Makefile:
+
+```bash
+# Build Docker image
+make build
+
+# Discover current AWS state
+AWS_PROFILE=my-profile make discover
+
+# Show Terraform plan
+AWS_PROFILE=my-profile make plan
+
+# Apply configuration
+AWS_PROFILE=my-profile make apply
+
+# Open interactive shell
+AWS_PROFILE=my-profile make shell
+```
+
+## Configuration
+
+Edit `config.yaml` to customize:
+
+- `resource_prefix` - Prefix for all resource names. **Required.**
+- `primary_region` - Primary AWS region
+- `audit_account_id` - Audit account ID (delegated admin). **Required.**
+- `audit_account_role` - Cross-account role name (default: `OrganizationAccountAccessRole`)
+- `tags` - Custom tags applied to all resources
+
+## Module Architecture
+
+### Provider Aliases
+
+- 17 management account regional providers (default + 16 aliases)
+- 17 audit account regional providers with cross-account role assumption
+- 17 log-archive account regional providers with cross-account role assumption
+- Total: 51 providers
+
+### Key Modules
+
+**GuardDuty Org Module** - Designates delegated admin (management account context):
+- `aws_guardduty_organization_admin_account` per region
+
+**GuardDuty Enabler Module** - Enables detector (management and audit account contexts):
+- Used for both management account (direct detectors) and audit account (delegated admin)
+- `aws_guardduty_detector` with S3, K8s, malware protection
+- `aws_guardduty_detector_feature` for Lambda and RDS protection
+- `aws_guardduty_publishing_destination` for S3 findings export (audit account only, conditional)
+
+**GuardDuty Org Config Module** - Organization-wide settings (audit account context):
+- `aws_guardduty_organization_configuration` with auto_enable = ALL
+- Organization features: S3, EKS, malware, runtime monitoring, Lambda, RDS
+- `aws_guardduty_member` enrolls log-archive account (management account excluded - org owner cannot be a member)
+
+## Post-Deployment
+
+### verify-guardduty.py
+
+Validates GuardDuty configuration across all 17 regions:
+- Service access enabled in Organizations
+- Delegated admin correctly configured
+- Organization auto-enable applied
+- Detectors enabled in management, log-archive, and audit accounts
+- Publishing destinations active and exporting to S3
+
+## Rules
+
+- **No Claude Attribution** - Do not mention Claude, AI, or any AI assistant in commit messages, documentation, or code comments.
+- **Use python3** - Always use `python3` instead of `python` when executing Python scripts.
+- **Run pre-commit before pushing** - Always run `pre-commit run --all-files` before pushing changes.
