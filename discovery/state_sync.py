@@ -246,16 +246,23 @@ def sync_guardduty_org_admin(config: dict, state_resources: set):
 def cleanup_removed_resources(state_resources: set):
     """Remove resources from state that are no longer in the Terraform config.
 
-    This handles migrations where resources are replaced by a different approach
-    (e.g., management detectors replaced by member enrollment via delegated admin).
+    This handles migrations where resources are replaced by a different approach.
+    Currently cleans up management account GuardDuty member enrollments - the
+    management account (org owner) cannot be enrolled as a member, so we use
+    direct detectors instead.
     """
     print("\n=== Cleaning Up Removed Resources ===\n")
 
+    account_ids = get_account_ids_from_tfvars()
+    mgmt_account_id = account_ids.get("management", "")
+
     removed_count = 0
-    patterns = ["module.guardduty_mgmt_"]
 
     for address in sorted(state_resources):
-        if any(address.startswith(p) for p in patterns):
+        # Remove management account member enrollments from org-config modules.
+        # The management account (org owner) cannot be enrolled as a GuardDuty
+        # member - it gets direct detectors via guardduty_mgmt_* modules instead.
+        if mgmt_account_id and "aws_guardduty_member.members" in address and mgmt_account_id in address:
             print(f"  Removing {address} from state...")
             success, output = run_terraform_cmd(["state", "rm", "-no-color", address])
             if success:
@@ -273,8 +280,9 @@ def cleanup_removed_resources(state_resources: set):
 def sync_guardduty_detectors(config: dict, management_account_id: str, state_resources: set):
     """Sync GuardDuty detectors into Terraform state.
 
-    Only syncs audit account detectors. Management and log-archive accounts
-    are enrolled as members by the org-config module via aws_guardduty_member.
+    Syncs both management and audit account detectors. Management detectors are
+    created directly (org owner cannot be enrolled as a member). Log-archive is
+    enrolled as a member by the org-config module.
     """
     print("\n=== Syncing GuardDuty Detectors ===\n")
 
@@ -288,6 +296,34 @@ def sync_guardduty_detectors(config: dict, management_account_id: str, state_res
     skipped_count = 0
     failed_count = 0
 
+    # Sync management account detectors (direct, using management providers)
+    for region in ALL_REGIONS:
+        region_suffix = region_to_module_suffix(region)
+        tf_address = f"module.guardduty_mgmt_{region_suffix}[0].aws_guardduty_detector.main"
+
+        if resource_exists_in_state(tf_address, state_resources):
+            skipped_count += 1
+            continue
+
+        gd_client = boto3.client("guardduty", region_name=region)
+        try:
+            response = gd_client.list_detectors()
+            detector_ids = response.get("DetectorIds", [])
+
+            if detector_ids:
+                detector_id = detector_ids[0]
+                print(f"  Importing {tf_address}...")
+                if import_resource(tf_address, detector_id):
+                    print("    Imported successfully")
+                    imported_count += 1
+                else:
+                    print(f"    Import failed for {region}")
+                    failed_count += 1
+        except ClientError as e:
+            print(f"    Error checking {region}: {e}")
+            failed_count += 1
+
+    # Sync audit account detectors (delegated admin)
     for region in ALL_REGIONS:
         region_suffix = region_to_module_suffix(region)
         tf_address = f"module.guardduty_audit_{region_suffix}[0].aws_guardduty_detector.main"

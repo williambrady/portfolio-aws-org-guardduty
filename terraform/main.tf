@@ -13,19 +13,14 @@ locals {
   findings_kms_key_arn = local.log_archive_exists ? module.kms_guardduty_findings[0].key_arn : ""
 
   # Accounts to enroll as GuardDuty members via the delegated admin.
-  # The management account is the org owner (not a member), so auto_enable
-  # does not cover it. Log-archive is a member but we enroll it explicitly
-  # to ensure it has a detector with all protection plans.
-  guardduty_member_accounts = concat(
-    var.management_account_email != "" ? [{
-      account_id = data.aws_caller_identity.current.account_id
-      email      = var.management_account_email
-    }] : [],
-    local.log_archive_exists && var.log_archive_account_email != "" ? [{
-      account_id = var.log_archive_account_id
-      email      = var.log_archive_account_email
-    }] : []
-  )
+  # Log-archive is enrolled explicitly to ensure it has a detector with all
+  # protection plans. The management account CANNOT be enrolled as a member
+  # (it is the org owner, not a member - the CreateMembers API silently drops
+  # it). Management gets a direct detector via guardduty_mgmt_* modules instead.
+  guardduty_member_accounts = local.log_archive_exists && var.log_archive_account_email != "" ? [{
+    account_id = var.log_archive_account_id
+    email      = var.log_archive_account_email
+  }] : []
 
   common_tags = merge(
     {
