@@ -15,12 +15,6 @@ variable "deployment_name" {
   type        = string
 }
 
-variable "management_account_id" {
-  description = "AWS account ID of the management account (auto-discovered from caller identity)"
-  type        = string
-  default     = ""
-}
-
 variable "audit_account_id" {
   description = "AWS account ID of the audit account (delegated administrator for GuardDuty)"
   type        = string
@@ -29,12 +23,6 @@ variable "audit_account_id" {
 
 variable "log_archive_account_id" {
   description = "AWS account ID of the log archive account (auto-discovered from org-baseline SSM parameter)"
-  type        = string
-  default     = ""
-}
-
-variable "management_account_email" {
-  description = "Email of the management account for GuardDuty member enrollment (auto-discovered)"
   type        = string
   default     = ""
 }
