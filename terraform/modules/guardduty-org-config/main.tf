@@ -151,13 +151,9 @@ resource "aws_guardduty_organization_configuration_feature" "rds_login_events" {
 # -----------------------------------------------------------------------------
 # Member Enrollment
 # -----------------------------------------------------------------------------
-# Enrolls member accounts (e.g., log-archive) as GuardDuty members via the
-# delegated admin. This creates detectors in those accounts with protection
-# plans configured by the organization configuration above.
-#
-# Note: The management account CANNOT be enrolled here - it is the org owner,
-# not a member. The CreateMembers API silently drops it. Management gets
-# direct detectors via the guardduty_mgmt_* modules instead.
+# Enrolls member accounts (management, log-archive) as GuardDuty members via
+# the delegated admin. This ensures these accounts have detectors with
+# protection plans configured by the organization configuration above.
 
 resource "aws_guardduty_member" "members" {
   for_each = { for m in var.member_accounts : m.account_id => m }

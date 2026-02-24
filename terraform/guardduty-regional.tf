@@ -5,12 +5,10 @@
 # - guardduty-org module: Called from management account to designate delegated admin
 # - guardduty-enabler module: Called for management + audit accounts (explicit detectors)
 # - guardduty-org-config module: Called from audit account to configure auto-enable
-#   and enroll log-archive as a member
+#   and enroll management + log-archive as members
 #
-# The management account is the org OWNER and cannot be enrolled as a GuardDuty
-# member (CreateMembers API silently drops it). It gets direct detectors instead.
-# The audit account (delegated admin) also requires an explicit detector.
-# Log-archive is enrolled as a member by the org-config module.
+# The audit account (delegated admin) requires an explicit detector.
+# Management and log-archive are enrolled as members by the org-config module.
 
 # =============================================================================
 # GuardDuty Delegated Administrator (Management Account)
@@ -503,9 +501,8 @@ module "guardduty_audit_sa_east_1" {
 # =============================================================================
 # Management Account - GuardDuty Detectors (Direct)
 # =============================================================================
-# The management account is the org OWNER, not a member. It cannot be enrolled
-# via aws_guardduty_member (the CreateMembers API silently drops it). Instead,
-# we create detectors directly using management account providers.
+# The management account needs an explicit detector created directly.
+# It is also enrolled as a member via the org-config module.
 
 module "guardduty_mgmt_us_east_1" {
   source = "./modules/guardduty-enabler"
@@ -750,8 +747,7 @@ module "guardduty_mgmt_sa_east_1" {
 # (Audit Account - Delegated Admin)
 # =============================================================================
 # Configures auto-enable and protection plan settings, then enrolls
-# log-archive as a GuardDuty member. The management account gets direct
-# detectors above (org owner cannot be enrolled as a member).
+# management and log-archive as GuardDuty members.
 # MUST run from AUDIT account (delegated admin).
 
 module "guardduty_org_config_us_east_1" {

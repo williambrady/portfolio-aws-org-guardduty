@@ -248,11 +248,19 @@ def main():
                 print("    Findings bucket will be created without access logging")
         print("")
 
-    # Look up log-archive account email for GuardDuty member enrollment
-    # (Management account is excluded - org owner cannot be enrolled as a member)
+    # Look up account emails for GuardDuty member enrollment
+    management_account_email = ""
     log_archive_account_email = ""
+    print("Account Emails (for GuardDuty member enrollment):")
+    try:
+        org_client = boto3.client("organizations", region_name=primary_region)
+        response = org_client.describe_account(AccountId=management_account_id)
+        management_account_email = response["Account"]["Email"]
+        print(f"    Management: {management_account_email}")
+    except ClientError as e:
+        print(f"    WARNING: Could not look up management email: {e}")
+        print("    Management account member enrollment will be skipped")
     if log_archive_account_id:
-        print("Account Emails (for GuardDuty member enrollment):")
         try:
             org_client = boto3.client("organizations", region_name=primary_region)
             response = org_client.describe_account(AccountId=log_archive_account_id)
@@ -260,8 +268,8 @@ def main():
             print(f"    Log Archive: {log_archive_account_email}")
         except ClientError as e:
             print(f"    WARNING: Could not look up log-archive email: {e}")
-            print("    GuardDuty member enrollment will be skipped")
-        print("")
+            print("    Log-archive member enrollment will be skipped")
+    print("")
 
     # Write discovery.json
     discovery_path = Path("/work/terraform/discovery.json")
@@ -280,6 +288,7 @@ def main():
         "resource_prefix": resource_prefix,
         "deployment_name": deployment_name,
         "management_account_id": management_account_id,
+        "management_account_email": management_account_email,
         "audit_account_id": audit_account_id,
         "log_archive_account_id": log_archive_account_id,
         "log_archive_account_email": log_archive_account_email,

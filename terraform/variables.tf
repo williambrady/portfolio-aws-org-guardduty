@@ -27,6 +27,18 @@ variable "log_archive_account_id" {
   default     = ""
 }
 
+variable "management_account_id" {
+  description = "AWS account ID of the management account (auto-discovered from caller identity)"
+  type        = string
+  default     = ""
+}
+
+variable "management_account_email" {
+  description = "Email of the management account for GuardDuty member enrollment (auto-discovered)"
+  type        = string
+  default     = ""
+}
+
 variable "log_archive_account_email" {
   description = "Email of the log-archive account for GuardDuty member enrollment (auto-discovered)"
   type        = string
